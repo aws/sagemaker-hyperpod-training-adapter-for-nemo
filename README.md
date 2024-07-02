@@ -9,7 +9,7 @@ To be added
 
 ### Formatting code
 
-To format the code, use the following command before committing your changes:
+To format the code, run following command before committing your changes:
 ```
 pip install pre-commit
 pre-commit run --all-files

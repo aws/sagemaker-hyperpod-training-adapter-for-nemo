@@ -99,7 +99,7 @@ data:
    train_dir: <path>/<to>/<data>
    val_dir: null
    dataset_type: gpt
-   use_synthetic_data: False
+   use_synthetic_data: True
    zipped_data: True #TODO: ideally we should have utils to check whether a data is zipped
 
 
