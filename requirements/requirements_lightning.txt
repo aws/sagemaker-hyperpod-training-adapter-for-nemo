@@ -1,0 +1,1 @@
+lightning==2.0.7 #need to align with nemo pytorch lightning version
