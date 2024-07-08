@@ -1,35 +1,31 @@
 #!/bin/bash
-#SBATCH --output=slurm-%x-%j.out
+
+set -ex
 
 
-set -xo pipefail
+# Sample cmd for the current script:
+#                  1               2          3            4             >=5
+# ./launch_fsdp.sh $CONTAINER_NAME $NUM_NODES $MASTER_NODE $SHELL_SCRIPT $@
+
+# **Assumes** the actual launch script ($SHELL_SCRIPT) takes >=2 arguments:
+#   1. num nodes
+#   2. master node
+#   3. Optionally more args as needed
 
 
-DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROGRAM="$0"
+# - Passed in args.
+CONTAINER_NAME=$1
+# HOSTFILE=$2
+SHELL_SCRIPT=$2  # Absolute or relative to `pwd`
 
-# export DOCKER_IMAGE="658645717510.dkr.ecr.us-west-2.amazonaws.com/smdistributed-modelparallel:2.2.0-gpu-py310-cu121-ubuntu20.04-sagemaker-smpv2.3.1"
-export DOCKER_IMAGE="855988369404.dkr.ecr.us-west-2.amazonaws.com/chehaoha-test:2.2.0-gpu-py310-cu121-ubuntu20.04-sagemaker-smpv2.3.1-nemo"
+# - Derived args: N.A.
 
-export NODES=4
-export TEST_NAME="chehaoha_llama3_kan"
-export OUT_DIR="llama3_job"
-export CONTAINER_NAME="llama3_benchmark_container"
-
-export PARTITION="benchmark"
+echo "envs are"
+env
 
 
-PREFIX="/fsx/users/chehaoha1/kandinsky/rubik/SMModelParallelExamples"
-BIN="${PREFIX}/SMModelParallelExamples/bin"
-export PATH="${BIN}:${PATH}"
 
-
-export CURDIR="/fsx/users/chehaoha1/kandinsky/adapter/SageMakerNeMoAdaptor/scripts"
-export PATH="${CURDIR}:${PATH}"
-
-
-"${BIN}/smprun" \
-    -v2 \
-    -i "${DOCKER_IMAGE}" \
-    -cn "${CONTAINER_NAME}" \
-    "${CURDIR}/train_llama.sh"
+MASTER_ADDR=$(scontrol show hostnames | sort | head -n 1)
+NNODES=$SLURM_NTASKS
+# docker exec -w `pwd` $CONTAINER_NAME bash -c "SLURM_PROCID=$SLURM_PROCID SLURM_JOB_ID=$SLURM_JOB_ID SLURM_JOB_NAME=$SLURM_JOB_NAME $SHELL_SCRIPT --hostfile $HOSTFILE $EXTRA_ARGS"
+docker exec -w `pwd` $CONTAINER_NAME bash -c "SLURM_PROCID=$SLURM_PROCID SLURM_JOB_ID=$SLURM_JOB_ID SLURM_JOB_NAME=$SLURM_JOB_NAME $SHELL_SCRIPT -n $NNODES --master_address $MASTER_ADDR"

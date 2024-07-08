@@ -7,7 +7,10 @@ from torch.utils.data import DataLoader
 
 class BaseDataModule(LightningDataModule):
     """
-    General Lightning DataModule class for SageMaker adaptor
+    General Lightning DataModule class for SageMaker adaptor, it deals with
+    1. Provide general function of build dataloader with sampler
+    2. Setup data parallel parameters
+    3. (TODO: WIP) Compute the processed batches for checkpointing and throughput calculation.
     """
 
     def __init__(self, cfg, trainer):

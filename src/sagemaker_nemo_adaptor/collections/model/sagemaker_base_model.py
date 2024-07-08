@@ -34,7 +34,7 @@ from sagemaker_nemo_adaptor.utils.train_utils import apply_activation_checkpoint
 _logger = get_logger()
 
 
-class SageMakerBaseModel(NLPModel):
+class SageMakerNLPBaseModel(NLPModel):
     """
     General Lightning Model class for SageMaker adaptor, it deals with general model/optimizer setup
     and training/eval behaviors.

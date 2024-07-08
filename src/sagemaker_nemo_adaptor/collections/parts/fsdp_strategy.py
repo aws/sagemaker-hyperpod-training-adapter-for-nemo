@@ -22,7 +22,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
     FSDP plugin for Pytorch Lightning with the support forsharding_strategy tensor-parallelism.
     SageMakerFSDPStrategy deals with
       - Distributed initialization, including torch distributed setup, smp distributed setup
-      - FSDP configuration and setup
+      - FSDP configuration and setup TODO: currently doing this within model class, we should revisit this
       - Hook for checkpoint save/load (TODO: revisit when implementing checkpoint)
 
     Args:

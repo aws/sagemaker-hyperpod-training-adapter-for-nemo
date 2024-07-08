@@ -25,6 +25,12 @@ Use the command below to install the sagemaker-nemo-adaptor library along with a
 
 ```pip install sagemaker-nemo-adaptor[all]```
 
+## Running jobs
+```
+cd scripts
+./run_llama.sh
+```
+
 ## Contributing
 
 ### Formatting code

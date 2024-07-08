@@ -1,10 +1,10 @@
 from torch.sagemaker.nn.huggingface.llama_flashattn import LlamaFlashAttention
 from transformers import LlamaConfig
 
-from sagemaker_nemo_adaptor.collections.model import SageMakerBaseModel
+from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
 
 
-class SageMakerLlamaModel(SageMakerBaseModel):
+class SageMakerLlamaModel(SageMakerNLPBaseModel):
     """
     Lightning Model class for Llama
     """

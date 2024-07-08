@@ -4,8 +4,12 @@ parse_inputs() {
     while [[ $# -gt 0 ]]; do
         key="$1"
         case $key in
-        --hostfile)
-            hostfile=$2
+        -n | --nnodes)
+            NNODES="$2"
+            shift 2
+            ;;
+        --master_address)
+            MASTER_ADDR=$2
             shift 2
             ;;
         *)
@@ -18,12 +22,14 @@ parse_inputs() {
 parse_inputs $@
 
 echo "HF is $hostfile"
-if [ -z "$hostfile" ]; then
-    echo "Hostfile needs to be passed"
-    exit 1
-fi
+# if [ -z "$hostfile" ]; then
+#     echo "Hostfile needs to be passed"
+#     exit 1
+# fi
 
-num_nodes=$(cat $hostfile | wc -l)
+# NNODES=$(cat $hostfile | wc -l)
+
+
 
 export NCCL_PROTO="simple"
 export NCCL_SOCKET_IFNAME="^lo,docker"
@@ -32,14 +38,14 @@ export FI_EFA_USE_DEVICE_RDMA=1
 export NCCL_DEBUG_SUBSYS=off
 export NCCL_DEBUG="INFO"
 export SM_NUM_GPUS=8
-export MASTER_ADDR=$(head -n 1 $hostfile)
+# export MASTER_ADDR=$(head -n 1 $hostfile)
 export GPU_NUM_DEVICES=8
 
 
 
+echo nnode
 
-
-TORCH_CMD="torchrun --nnodes=${num_nodes} --nproc_per_node=8"
+TORCH_CMD="torchrun --nnodes=${NNODES} --nproc_per_node=8"
 
 # If nsys path provided, profile using Nsys, but only on 1st node. Requires job to be launched using sbatch
 if [[ -n $nsys_path ]]; then
@@ -52,8 +58,8 @@ else
     profile_nsys=0
 fi
 
-export PYTHONPATH="${PYTHONPATH}:/fsx/users/chehaoha1/kandinsky/adapter/SageMakerNeMoAdaptor/src"
-
+export PYTHONPATH="${PYTHONPATH}:/fsx/users/chehaoha1/kandinsky/adapter/SageMakerNeMoAdaptor/src" # TODO: remove when package installation ready
+echo "cmd $TORCH_CMD"
 $TORCH_CMD \
     --rdzv_endpoint=$MASTER_ADDR:29400 --rdzv_id=100 --rdzv_backend=c10d \
     llama_pretrain.py
