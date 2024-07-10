@@ -1,0 +1,26 @@
+# log and data files
+trace
+.DS_Store
+.hydra
+.bash_history.local
+
+# Distribution packaging
+build/
+.eggs/
+*.egg-info/
+*.egg
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+**.pyc
+
+# Unit test / coverage reports
+coverage_html_report/
+.coverage
+.coverage.*
+.cache
+*.cover
+.hypothesis/
+.pytest_cache/

@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+minversion = 8.0
+# durations=0 will display all tests execution time, sorted in ascending order starting from from the slowest one.
+# -vv will also display tests with durration = 0.00s
+addopts = "--quiet --durations=0"  # always add these arguments to pytest
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "src/sagemaker_nemo_adaptor/",
+]
+
+[tool.coverage.report]
+ignore_errors = true
+
+[tool.coverage.html]
+directory = "coverage_html_report"

@@ -21,6 +21,7 @@ def extra_requirements():
         "nemo": parse_requirements("requirements_nemo.txt"),
         "lightning": parse_requirements("requirements_lightning.txt"),
         "all": parse_requirements("requirements_nemo.txt") + parse_requirements("requirements_lightning.txt"),
+        "test": parse_requirements("requirements_test.txt")
     }
 
 
@@ -32,5 +33,5 @@ setup(
     package_dir={"": "src"},
     install_requires=parse_requirements("requirements.txt"),
     extras_require=extra_requirements(),
-    python_requires=">=3.9",
+    python_requires=">= 3.10",
 )
