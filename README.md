@@ -31,6 +31,31 @@ cd scripts
 ./run_llama.sh
 ```
 
+## Testing
+
+Follow the instructions on the "Installing SageMakerNeMoAdaptor" then use the command below to install the testing dependencies:
+
+```pip install sagemaker-nemo-adaptor[test]```
+
+### Unit Tests
+To run the unit tests navigate to the root directory and use the command
+```pytest``` plus any desired flags.
+
+The `myproject.toml` file defines additional options that are always appended to the `pytest` command:
+```
+[tool.pytest.ini_options]
+...
+addopts = [
+    "--cache-clear",
+    "--quiet",
+    "--durations=0",
+    "--cov=src/sagemaker_nemo_adaptor/",
+    # uncomment this line to see a detailed HTML test coverage report instead of the usual summary table output to stdout.
+    # "--cov-report=html",
+    "tests/sagemaker_nemo_adaptor/",
+]
+```
+
 ## Contributing
 
 ### Formatting code

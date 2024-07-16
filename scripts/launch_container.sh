@@ -3,7 +3,7 @@
 set -e
 
 export CONTAINER_NAME=${2:-"smp"}
-export CONTAINER_IMAGE=${1:-"855988369404.dkr.ecr.us-west-2.amazonaws.com/rubik:pytorch_cur_testtp-preview-0-1"}
+export CONTAINER_IMAGE=${1:-"658645717510.dkr.ecr.us-west-2.amazonaws.com/smdistributed-modelparallel:2.2.0-gpu-py310-cu121-ubuntu20.04-sagemaker-smpv2.3.1"}
 
 echo "image is $CONTAINER_IMAGE"
 # Set the docker ECR path to your DLC

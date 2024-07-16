@@ -1,6 +1,8 @@
 import torch
 import torch.distributed as dist
 from nemo.utils import AppState
+from omegaconf import DictConfig
+from pytorch_lightning import Trainer
 from pytorch_lightning.core.datamodule import LightningDataModule
 from torch.utils.data import DataLoader
 
@@ -13,7 +15,7 @@ class BaseDataModule(LightningDataModule):
     3. (TODO: WIP) Compute the processed batches for checkpointing and throughput calculation.
     """
 
-    def __init__(self, cfg, trainer):
+    def __init__(self, cfg: DictConfig, trainer: Trainer):
         super().__init__()
         self.cfg = cfg
         self.trainer = trainer
@@ -123,6 +125,7 @@ class SkipDataLoader(DataLoader):
     def __iter__(self):
         for batch in super().__iter__():
             num_seq = int(self.batch_size)
+
             if self.cur_seq_index + num_seq > self.resume_from_sequence_number % (len(self) * self.batch_size):
                 yield batch
             else:
@@ -130,4 +133,5 @@ class SkipDataLoader(DataLoader):
                     print(
                         f"Dataloader skipping {num_seq} sequences in this batch as starting from {self.resume_from_sequence_number} sequences"
                     )
+
             self.cur_seq_index += num_seq
