@@ -28,7 +28,7 @@ Use the command below to install the sagemaker-nemo-adaptor library along with a
 ## Running jobs
 ```
 cd scripts
-./run_llama.sh
+sbatch -N 4 ./run_llama.sh
 ```
 
 ## Testing

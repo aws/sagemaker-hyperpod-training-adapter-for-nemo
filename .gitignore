@@ -1,4 +1,5 @@
 # log and data files
+outputs/
 trace
 .DS_Store
 .hydra
