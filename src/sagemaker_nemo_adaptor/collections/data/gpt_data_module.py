@@ -9,17 +9,17 @@ class GPTDataModule(BaseDataModule):
 
     def train_dataloader(self):
         self._train_ds = GPTPretrainingDataset(
-            input_paths=self.cfg.data.train_dir,
-            max_context_width=self.cfg.max_context_width,
-            zipped=self.cfg.data.zipped_data,
+            input_paths=self.cfg.model.data.train_dir,
+            max_context_width=self.cfg.model.max_context_width,
+            zipped=self.cfg.model.data.zipped_data,
         )
         return self._build_dataloader(self._train_ds)
 
     def val_dataloader(self):
-        if self.cfg.data.val_dir:
+        if self.cfg.model.data.val_dir:
             self._validation_ds = GPTPretrainingDataset(
-                input_paths=self.cfg.data.val_dir,
-                max_context_width=self.cfg.max_context_width,
+                input_paths=self.cfg.model.data.val_dir,
+                max_context_width=self.cfg.model.max_context_width,
                 zipped=self.cfg.zipped.data,
             )
             return self._build_dataloader(self._validation_ds)

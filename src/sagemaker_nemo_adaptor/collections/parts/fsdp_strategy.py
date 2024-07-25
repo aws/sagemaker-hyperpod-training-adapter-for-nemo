@@ -5,6 +5,7 @@ import torch
 import torch.sagemaker as tsm
 from nemo.collections.nlp.parts import utils_funcs
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
+from omegaconf.dictconfig import DictConfig
 from torch.distributed.fsdp import MixedPrecision
 
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
@@ -14,7 +15,6 @@ from sagemaker_nemo_adaptor.utils.fsdp_utils import (
     get_sharding_strategy,
     get_transformer_layer,
 )
-from sagemaker_nemo_adaptor.utils.sm_env_utils import enable_dummy_sm_env
 
 
 class SageMakerFSDPStrategy(NLPFSDPStrategy):
@@ -24,81 +24,40 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
       - Distributed initialization, including torch distributed setup, smp distributed setup
       - FSDP configuration and setup TODO: currently doing this within model class, we should revisit this
       - Hook for checkpoint save/load (TODO: revisit when implementing checkpoint)
-
-    Args:
-        use_smp: Whether to use SageMaker Model Parallelism as backend
-        smp_config_dict: SageMaker Model Parallelism configs
-        sharding_strategy: FSDP parameter sharding strategy.
-        backward_fetch_policy: backward prefetching of all-gathers
-        process_group_backend: Communication backend, available options: nccl, smddp
-        grad_reduce_dtype: Data type for FSDP gradient shard ReduceScatter.
-        sharded_checkpoint: Store/load FSDP-sharded checkpoints.
-        precision: Precision recipe to be used with FSDP.
     """
 
     # TODO: We need to figure out the best way of passing these arguments, need to revisit this during implementing recipe checker.
     # Currently feeding everything here so we can know what to deal with for strategy class
     def __init__(
         self,
+        cfg: DictConfig,
         use_smp: bool = True,
         smp_config_dict: Dict = None,
         # FSDP args
-        auto_wrap_policy: str = "transformer_auto_wrap_policy",
-        model_type: str = "llama_v3",
-        sharding_strategy: str = "hybrid_shard",
-        forward_prefetch: bool = True,
-        backward_fetch_policy: str = "backward_pre",
-        limit_all_gathers: bool = True,
-        use_orig_params: bool = False,
-        moe: bool = False,
-        grad_reduce_dtype: Union[int, str] = None,  # TODO: util to parse from str
-        precision: Union[int, str] = "bf16",
-        # End of FSDP args
-        delayed_param: bool = True,
-        finetune_with_pretrained_weights: bool = False,  # Todo: check when working on finetune cases
-        fp8: bool = True,
-        activation_checkpointing: bool = True,
-        offload_activations: bool = False,
-        process_group_backend: str = "nccl",
-        sharded_checkpoint: bool = False,  # Todo: check when working on checkpoint
-        patch_neox_rope: bool = False,
-        set_buffer_dtype: Optional[str] = None,
-        seed: int = 12345,
         **kwargs: Union[Any, Dict[str, Any]],
     ) -> None:
+        self.cfg = cfg
         self.use_smp = use_smp
         self.smp_config_dict = smp_config_dict
-        self.delayed_param = delayed_param
-        self.delayed_param_initer = None
-        self.finetune_with_pretrained_weights = finetune_with_pretrained_weights
-        self.fp8 = fp8
-        self.moe = moe
-        self.activation_checkpointing = activation_checkpointing
-        self.seed = seed
-        self.model_type = model_type
-        self.offload_activations = offload_activations
 
-        # Set the mixed precision recipe
-        kwargs["mixed_precision"] = self._set_mixed_precision_recipe(
-            precision, grad_reduce_dtype, set_buffer_dtype=set_buffer_dtype
-        )
+        # # Set the mixed precision recipe TODO: Uncomment this once we moved FSDP setup back to strategy
+        # kwargs["mixed_precision"] = self._set_mixed_precision_recipe(
+        #     precision, grad_reduce_dtype, set_buffer_dtype=set_buffer_dtype
+        # )
 
-        # Set FSDP configurations
-        kwargs["backward_prefetch"] = get_backward_fetch_policy(backward_fetch_policy)
-        transformer_layer = get_transformer_layer(model_type, use_smp, moe)
-        kwargs["auto_wrap_policy"] = get_auto_wrap_policy(auto_wrap_policy, transformer_layer)
-        kwargs["sharding_strategy"] = get_sharding_strategy(sharding_strategy)
-        kwargs["forward_prefetch"] = forward_prefetch
-        # use_orig_params needs to be True for SMP transformer engine usecase
-        kwargs["use_orig_params"] = True if use_smp else use_orig_params
+        # # Set FSDP configurations
+        # kwargs["backward_prefetch"] = get_backward_fetch_policy(backward_fetch_policy)
+        # transformer_layer = get_transformer_layer(model_type, use_smp, moe)
+        # kwargs["auto_wrap_policy"] = get_auto_wrap_policy(auto_wrap_policy, transformer_layer)
+        # kwargs["sharding_strategy"] = get_sharding_strategy(sharding_strategy)
+        # kwargs["forward_prefetch"] = forward_prefetch
+        # # use_orig_params needs to be True for SMP transformer engine usecase
+        # kwargs["use_orig_params"] = True if use_smp else use_orig_params
         # Set FSDP state dict configs
-        self.sharded_checkpoint = sharded_checkpoint
+        # self.sharded_checkpoint = sharded_checkpoint
         # self.state_dict_context = (
         #     _get_sharded_state_dict_context if sharded_checkpoint else _get_full_state_dict_context
         # ) TODO: implement when doing checkpoint
-
-        # Init SM environment for smp usage
-        enable_dummy_sm_env()
 
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
@@ -207,7 +166,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return model
 
     def setup(self, trainer: "pl.Trainer") -> None:
-        print(f"che calling strategy setup")
         super(NLPFSDPStrategy, self).setup(trainer)
 
         if torch.distributed.get_rank() == 0:
@@ -218,7 +176,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         """
         Setup distributed for SMP, and setup nemo distributing variables
         """
-        print(f"che calling strategy env setup")
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).setup_environment()
 
@@ -231,10 +188,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             global_rank=self.global_rank,
             local_rank=self.local_rank,
             tensor_model_parallel_size=self.smp_config_dict["tensor_parallel_degree"],
-            seed=self.seed,
+            seed=self.cfg.model.seed,
         )
-        if torch.distributed.get_rank() == 0:
-            print(f"che calling strategy env setup")
 
     def lightning_module_state_dict(self) -> Dict[str, Any]:
         """

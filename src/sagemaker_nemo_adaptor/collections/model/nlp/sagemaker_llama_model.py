@@ -15,15 +15,15 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
         TODO: Implement Autoconfig in parent class, so Cx can init with only given a HF model name
         """
         model_config = LlamaConfig(
-            vocab_size=self.cfg.vocab_size,
-            hidden_size=self.cfg.hidden_width,
-            intermediate_size=self.cfg.llama_intermediate_size,
-            num_hidden_layers=self.cfg.num_layers,
-            num_attention_heads=self.cfg.num_heads,
-            num_key_value_heads=self.cfg.num_key_value_heads,
+            vocab_size=self._cfg.vocab_size,
+            hidden_size=self._cfg.hidden_width,
+            intermediate_size=self._cfg.llama_intermediate_size,
+            num_hidden_layers=self._cfg.num_layers,
+            num_attention_heads=self._cfg.num_heads,
+            num_key_value_heads=self._cfg.num_key_value_heads,
             hidden_act="silu",
-            max_position_embeddings=self.cfg.max_context_width,
-            initializer_range=self.cfg.initializer_range,
+            max_position_embeddings=self._cfg.max_context_width,
+            initializer_range=self._cfg.initializer_range,
             rms_norm_eps=1e-5,
             use_cache=False,
             pretraining_tp=1,

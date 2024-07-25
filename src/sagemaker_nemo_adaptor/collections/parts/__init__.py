@@ -1,5 +1,3 @@
-from sagemaker_nemo_adaptor.utils.sm_env_utils import enable_dummy_sm_env
-
-enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported TODO: call in a more generic way
-
+from .ddp_strategy import SageMakerDDPStrategy
 from .fsdp_strategy import SageMakerFSDPStrategy
+from .sagemaker_trainer_builder import SageMakerTrainerBuilder

@@ -62,7 +62,7 @@ def build_dataset(cfg, trainer, data_prefix, data_impl, num_samples, seq_length,
         logging.info("     Total {} documents is : {} ".format(name, total_num_of_documents))
         drop_last = True
         if name == "valid":
-            drop_last = cfg.data.get("validation_drop_last", True)
+            drop_last = cfg.model.data.get("validation_drop_last", True)
         dataset = GPTDataset(
             cfg,
             trainer,
@@ -109,8 +109,8 @@ def build_train_valid_test_datasets(
             and data_prefix.get("test") is not None
             and data_prefix.get("validation") is not None
         ), f"Data prefix dictionary should have train, test and validation keys.  data_prefix currently has only {data_prefix.keys()}"
-        if cfg.data.splits_string is not None:
-            logging.warning(cfg.data.splits_string + " ignored since data prefix is of type dictionary.")
+        if cfg.model.data.splits_string is not None:
+            logging.warning(cfg.model.data.splits_string + " ignored since data prefix is of type dictionary.")
         train_ds = build_dataset(
             cfg,
             trainer,
@@ -250,7 +250,7 @@ def _build_train_valid_test_datasets(
             documents = np.arange(start=splits[index], stop=splits[index + 1], step=1, dtype=np.int32)
             drop_last = True
             if name == "valid":
-                drop_last = cfg.data.get("validation_drop_last", True)
+                drop_last = cfg.model.data.get("validation_drop_last", True)
             dataset = GPTDataset(
                 cfg,
                 trainer,
@@ -298,17 +298,17 @@ class GPTDataset(GPTDatasetNeMo):
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
-        self.reset_position_ids = cfg.data.get("reset_position_ids", False)
-        self.reset_attention_mask = cfg.data.get("reset_attention_mask", False)
-        self.eod_mask_loss = cfg.data.get("eod_mask_loss", False)
+        self.reset_position_ids = cfg.model.data.get("reset_position_ids", False)
+        self.reset_attention_mask = cfg.model.data.get("reset_attention_mask", False)
+        self.eod_mask_loss = cfg.model.data.get("eod_mask_loss", False)
         self.eos_id = tokenizer.eos_id
-        self.no_seqlen_plus_one_input_tokens = cfg.data.get("no_seqlen_plus_one_input_tokens", False)
+        self.no_seqlen_plus_one_input_tokens = cfg.model.data.get("no_seqlen_plus_one_input_tokens", False)
         self.add_extra_token = 1
         if self.no_seqlen_plus_one_input_tokens:
             self.add_extra_token = 0
 
         # save index mappings to a configurable dir
-        self.index_mapping_dir = cfg.data.get("index_mapping_dir", None)
+        self.index_mapping_dir = cfg.model.data.get("index_mapping_dir", None)
 
         # create index_mapping_dir on rank 0
         if torch.distributed.is_available() and torch.distributed.is_initialized():

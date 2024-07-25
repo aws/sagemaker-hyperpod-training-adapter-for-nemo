@@ -41,13 +41,13 @@ class SageMakerNLPBaseModel(NLPModel):
     User will need to either consume the provided inheritors or inherite and implement their own model class.
     """
 
-    def __init__(self, cfg: DictConfig, trainer: Trainer, no_lm_init=True):
+    def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp=True, no_lm_init=True):
         """
         no_lm_init: Will only be False for BERT model
         """
 
-        self.use_smp = cfg.use_smp
-        self.cfg = cfg
+        self.use_smp = use_smp
+        self._cfg = cfg
 
         self.grad_norm = None
         super().__init__(cfg, trainer, no_lm_init)
@@ -66,9 +66,9 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         # Building model
         model_config = self.get_model_config()
-        if self.cfg.delayed_param:
+        if self._cfg.delayed_param:
             # TODO: revisit this when implementing fine tuning
-            if self.cfg.finetune_with_pretrained_weights and dist.get_rank() == 0:
+            if self._cfg.finetune_with_pretrained_weights and dist.get_rank() == 0:
                 # create model with pretrained weights on one rank even if we want to use
                 # delayed param, param init on other ranks will still be delayed
                 self.build_model(model_config)
@@ -76,15 +76,15 @@ class SageMakerNLPBaseModel(NLPModel):
                 with init_empty_weights():
                     self.build_model(model_config)
             # TODO: check why this needed, and revisit for finetune case
-            if self.cfg.do_finetune:
+            if self._cfg.do_finetune:
                 dist.barrier()
         else:
             self.build_model(model_config)
 
         # Transfer model to SMP model
-        if self.cfg.use_smp:
+        if self.use_smp:
             moe_config = None  # TODO: Add moe support
-            load_state_dict_from_rank0 = self.cfg.finetune_with_pretrained_weights
+            load_state_dict_from_rank0 = self._cfg.finetune_with_pretrained_weights
             self.model = transform(
                 self.model,
                 config=moe_config,
@@ -92,11 +92,11 @@ class SageMakerNLPBaseModel(NLPModel):
             )
 
         self.fp8_recipe = None
-        if self.cfg.fp8 and self.cfg.use_smp:
+        if self._cfg.fp8 and self.use_smp:
             self.fp8_recipe = DelayedScaling(
                 fp8_format=Format.HYBRID,
-                amax_history_len=self.cfg.fp8_amax_history_len,
-                amax_compute_algo=self.cfg.fp8_amax_compute_algo,
+                amax_history_len=self._cfg.fp8_amax_history_len,
+                amax_compute_algo=self._cfg.fp8_amax_compute_algo,
             )
         self.setup_fsdp()
 
@@ -104,16 +104,14 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         setup FSDP
         """
-        transformer_layer = get_transformer_layer(self.cfg.model_type, self.cfg.use_smp, self.cfg.moe)
-        auto_wrap_policy = get_auto_wrap_policy(self.cfg.auto_wrap_policy, transformer_layer)
-        mixed_precision_policy = set_mixed_precision_recipe(
-            precision=self.cfg.trainer.precision, use_smp=self.cfg.use_smp
-        )
-        sharding_strategy = get_sharding_strategy(self.cfg.sharding_strategy)
-        backward_prefetch = get_backward_fetch_policy(self.cfg.backward_fetch_policy)
+        transformer_layer = get_transformer_layer(self._cfg.model_type, self.use_smp, self._cfg.moe)
+        auto_wrap_policy = get_auto_wrap_policy(self._cfg.auto_wrap_policy, transformer_layer)
+        mixed_precision_policy = set_mixed_precision_recipe(precision=self._cfg.precision, use_smp=self.use_smp)
+        sharding_strategy = get_sharding_strategy(self._cfg.sharding_strategy)
+        backward_prefetch = get_backward_fetch_policy(self._cfg.backward_fetch_policy)
 
-        if self.cfg.delayed_param:
-            if self.cfg.finetune_with_pretrained_weights:
+        if self._cfg.delayed_param:
+            if self._cfg.finetune_with_pretrained_weights:
                 if self.global_rank != 0:
                     delayed_param_initer = DelayedParamIniter(self.model)
             else:
@@ -128,7 +126,7 @@ class SageMakerNLPBaseModel(NLPModel):
 
         with (
             delayed_param_initer.validate_params_and_buffers_inited()
-            if (delayed_param_initer and not self.cfg.finetune_with_pretrained_weights)
+            if (delayed_param_initer and not self._cfg.finetune_with_pretrained_weights)
             else nullcontext()
         ):
             self.model = FSDP(
@@ -137,46 +135,47 @@ class SageMakerNLPBaseModel(NLPModel):
                 mixed_precision=mixed_precision_policy,
                 sharding_strategy=sharding_strategy,
                 backward_prefetch=backward_prefetch,
-                forward_prefetch=self.cfg.forward_prefetch,
-                limit_all_gathers=self.cfg.limit_all_gathers,
+                forward_prefetch=self._cfg.forward_prefetch,
+                limit_all_gathers=self._cfg.limit_all_gathers,
                 device_id=torch.cuda.current_device(),
-                use_orig_params=self.cfg.use_orig_param,
+                use_orig_params=self._cfg.use_orig_param,
                 param_init_fn=param_init_fn,
                 post_param_init_fn=post_param_init_fn,
-                sync_module_states=self.cfg.finetune_with_pretrained_weights,
+                sync_module_states=self._cfg.finetune_with_pretrained_weights,
+            )
+        if self._cfg.activation_checkpointing:
+            apply_activation_checkpoint(
+                model=self.model,
+                model_type=self._cfg.model_type,
+                use_smp=self.use_smp,
+                fp8=self._cfg.fp8,
+                moe=self._cfg.moe,
             )
 
-        apply_activation_checkpoint(
-            model=self.model,
-            model_type=self.cfg.model_type,
-            use_smp=self.cfg.use_smp,
-            fp8=self.cfg.fp8,
-            moe=self.cfg.moe,
-        )
-
-        if self.cfg.offload_activations:
+        if self._cfg.offload_activations:
             from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
                 offload_wrapper,
             )
 
             model = offload_wrapper(model)
-            if self.cfg.use_smp and self.cfg.model_type == "gpt_neox" and self.cfg.patch_neox_rope:
+            if (
+                self.use_smp and self._cfg.model_type == "gpt_neox" and self._cfg.patch_neox_rope
+            ):  # TODO: add a check to the model type and use enum for it
                 patch_neox_rope(model)
-
-        if torch.distributed.get_rank() == 0:
-            print(f"che calling model setup finished")
 
     def build_model(self, model_config):
         """
         Initialize model and configure flash attention
         """
-        if self.cfg.pretrained_model_weights:
-            _logger.info("Loading pretrained weights from %s.", self.cfg.pretrained_model_weights)
+        if self._cfg.pretrained_model_weights:
+            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_weights)
             if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
-                self.model = AutoModelForCausalLM.from_pretrained(pretrained_model_weights, config=model_config)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self._cfg.pretrained_model_weights, config=model_config
+                )
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    pretrained_model_weights, attn_implementation="flash_attention_2", config=model_config
+                    self._cfg.pretrained_model_weights, attn_implementation="flash_attention_2", config=model_config
                 )
         else:
             if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
@@ -184,7 +183,7 @@ class SageMakerNLPBaseModel(NLPModel):
             else:
                 self.model = AutoModelForCausalLM.from_config(model_config, attn_implementation="flash_attention_2")
 
-        if self.cfg.use_smp_flash_attn:
+        if self._cfg.use_smp_flash_attn:
             self.configure_flash_attn()
 
     def configure_flash_attn(self):
@@ -200,9 +199,9 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
         # uses default causal mask
-        if self.cfg.fp8 and self.cfg.use_smp:
+        if self._cfg.fp8 and self.use_smp:
             with transformer_engine.pytorch.fp8_autocast(
-                enabled=self.cfg.fp8, fp8_recipe=self.fp8_recipe, fp8_group=tsm.state.world_process_group
+                enabled=self._cfg.fp8, fp8_recipe=self.fp8_recipe, fp8_group=tsm.state.world_process_group
             ):
                 loss = self.model(input_ids=input_ids, attention_mask=None, labels=labels)["loss"]
         else:
@@ -248,15 +247,12 @@ class SageMakerNLPBaseModel(NLPModel):
         else:
             return [self._optimizer], [self._scheduler]
 
-        if torch.distributed.get_rank() == 0:
-            print(f"che calling opt setup fiished")
-
     def configure_gradient_clipping(self, *args, **kwargs):
         """
         Cutomized gradient clipping for SMP
         TODO: figure out whether we should still use this for non-SMP usecase
         """
-        self.grad_norm = clip_grad_norm_(self.model, self.cfg.grad_clip)
+        self.grad_norm = clip_grad_norm_(self.model, self._cfg.grad_clip)
         return
 
     def on_train_batch_end(self, *args, **kwargs):
@@ -272,7 +268,7 @@ class SageMakerNLPBaseModel(NLPModel):
 
     def _process_loss(self):
         """General function to process loss after train/eval"""
-        if self.cfg.log_reduced_training_loss:
+        if self._cfg.log_reduced_training_loss:
             loss_detached = self.loss.detach()
             dist.all_reduce(loss_detached)
             loss_scalar = loss_detached.item() / dist.get_world_size()
@@ -287,8 +283,8 @@ class SageMakerNLPBaseModel(NLPModel):
         1. Override max step from config lr_decay_iters
         2. Get data loader length from datamodule
         """
-        if self.cfg.lr_decay_iters is not None:
-            return self.cfg.lr_decay_iters
+        if self._cfg.lr_decay_iters is not None:
+            return self._cfg.lr_decay_iters
         else:
             if getattr(self, "_trainer", None) is None:
                 logging.warning("Cannot compute `max_steps` as no trainer is set")

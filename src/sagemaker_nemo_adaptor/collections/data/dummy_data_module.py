@@ -8,7 +8,7 @@ class DummyDataModule(BaseDataModule):
     """
 
     def train_dataloader(self):
-        self._train_ds = DummyDataset(vocab_size=self.cfg.vocab_size, seqlen=self.cfg.max_context_width)
+        self._train_ds = DummyDataset(vocab_size=self.cfg.model.vocab_size, seqlen=self.cfg.model.max_context_width)
         return self._build_dataloader(self._train_ds)
 
     def val_dataloader(self):

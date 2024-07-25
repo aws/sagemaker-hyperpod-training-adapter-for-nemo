@@ -51,7 +51,7 @@ class BaseDataModule(LightningDataModule):
         sampler = torch.utils.data.DistributedSampler(
             dataset,
             shuffle=shuffle,
-            seed=self.cfg.seed,
+            seed=self.cfg.model.seed,
             rank=self.dp_rank,
             num_replicas=self.dp_size,
             drop_last=True,
@@ -59,7 +59,7 @@ class BaseDataModule(LightningDataModule):
 
         kwargs = {
             "sampler": sampler,
-            "batch_size": self.cfg.train_batch_size,
+            "batch_size": self.cfg.model.train_batch_size,
             "num_workers": num_workers,
             "collate_fn": collate_fn,
             "pin_memory": True,

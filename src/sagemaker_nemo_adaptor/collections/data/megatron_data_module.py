@@ -26,7 +26,7 @@ from sagemaker_nemo_adaptor.collections.data.datasets import (
 class MegatronDataModule(BaseDataModule):
     def setup(self, stage=None):
         super().setup()
-        if hasattr(self.cfg.data, "tokenizer"):
+        if hasattr(self.cfg.model.data, "tokenizer"):
             # build tokenizer (defaults to nemo supported tokenizers)
             self._build_tokenizer()
 
@@ -35,7 +35,7 @@ class MegatronDataModule(BaseDataModule):
 
         if stage == "predict":
             return
-        elif self.cfg.data.get("fine_tuning", False):
+        elif self.cfg.model.data.get("fine_tuning", False):
             self.build_sft_datasets()
         else:
             # TODO: consider adding a ModelPT guard to check if model is being restored.
@@ -48,7 +48,7 @@ class MegatronDataModule(BaseDataModule):
             logging.info(
                 f"Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}"
             )
-            if self.cfg.data.get("fine_tuning", False):
+            if self.cfg.model.data.get("fine_tuning", False):
                 return self.build_fine_tuning_data_loader(self._train_ds, cfg.train_ds)
             else:
                 return self.build_pretraining_data_loader(self._train_ds, consumed_samples)
@@ -61,15 +61,15 @@ class MegatronDataModule(BaseDataModule):
             )
 
             drop_last = True
-            if not self.cfg.data.get("validation_drop_last", True):
+            if not self.cfg.model.data.get("validation_drop_last", True):
                 logging.info(f"Drop last in validation dataset is set to False")
                 drop_last = False
             pad_samples_to_global_batch_size = False
-            if self.cfg.data.get("pad_samples_to_global_batch_size", False):
+            if self.cfg.model.data.get("pad_samples_to_global_batch_size", False):
                 logging.info("pad_samples_to_global_batch_size set to True")
                 pad_samples_to_global_batch_size = True
-            if self.cfg.data.get("fine_tuning", False):
-                return self.build_fine_tuning_data_loader(self._validation_ds, self.cfg.data.validation_ds)
+            if self.cfg.model.data.get("fine_tuning", False):
+                return self.build_fine_tuning_data_loader(self._validation_ds, self.cfg.model.data.validation_ds)
             else:
                 return self.build_pretraining_data_loader(
                     self._validation_ds, consumed_samples, "validation", drop_last, pad_samples_to_global_batch_size
@@ -81,8 +81,8 @@ class MegatronDataModule(BaseDataModule):
             logging.info(
                 f"Setting up test dataloader with len(len(self._test_ds)): {len(self._test_ds)} and consumed samples: {consumed_samples}"
             )
-            if self.cfg.data.get("fine_tuning", False):
-                return self.build_fine_tuning_data_loader(self._test_ds, self.cfg.data.test_ds)
+            if self.cfg.model.data.get("fine_tuning", False):
+                return self.build_fine_tuning_data_loader(self._test_ds, self.cfg.model.data.test_ds)
             else:
                 return self.build_pretraining_data_loader(self._test_ds, consumed_samples)
 
@@ -90,7 +90,7 @@ class MegatronDataModule(BaseDataModule):
         logging.info("Building GPT datasets.")
         if self.trainer.limit_val_batches > 1.0 and isinstance(self.trainer.limit_val_batches, float):
             raise ValueError("limit_val_batches must be an integer or float less than or equal to 1.0.")
-        global_batch_size = self.cfg.data.global_batch_size
+        global_batch_size = self.cfg.model.data.global_batch_size
         max_train_steps = self.trainer.max_steps
         eval_iters = (max_train_steps // self.trainer.val_check_interval + 1) * self.trainer.limit_val_batches
         test_iters = self.trainer.limit_test_batches
@@ -109,13 +109,13 @@ class MegatronDataModule(BaseDataModule):
         self._train_ds, self._validation_ds, self._test_ds = build_train_valid_test_datasets(
             cfg=self.cfg,
             trainer=self.trainer,
-            data_prefix=self.cfg.data.data_prefix,
-            data_impl=self.cfg.data.data_impl,
-            splits_string=self.cfg.data.splits_string,
+            data_prefix=self.cfg.model.data.data_prefix,
+            data_impl=self.cfg.model.data.data_impl,
+            splits_string=self.cfg.model.data.splits_string,
             train_valid_test_num_samples=train_valid_test_num_samples,
-            seq_length=self.cfg.data.seq_length,
-            seed=self.cfg.seed,
-            skip_warmup=self.cfg.data.get("skip_warmup", True),
+            seq_length=self.cfg.model.data.seq_length,
+            seed=self.cfg.model.seed,
+            skip_warmup=self.cfg.model.data.get("skip_warmup", True),
             tokenizer=self.tokenizer,
         )
         if self._train_ds is not None:
@@ -136,38 +136,38 @@ class MegatronDataModule(BaseDataModule):
 
         logging.info(f"Building dataloader with consumed samples: {consumed_samples}")
         # Megatron sampler
-        if hasattr(self.cfg.data, "dataloader_type") and self.cfg.data.dataloader_type is not None:
-            if self.cfg.data.dataloader_type == "single":
+        if hasattr(self.cfg.model.data, "dataloader_type") and self.cfg.model.data.dataloader_type is not None:
+            if self.cfg.model.data.dataloader_type == "single":
                 batch_sampler = MegatronPretrainingBatchSampler(
                     total_samples=len(dataset),
                     consumed_samples=consumed_samples,
-                    micro_batch_size=self.cfg.data.micro_batch_size,
-                    global_batch_size=self.cfg.data.global_batch_size,
+                    micro_batch_size=self.cfg.model.data.micro_batch_size,
+                    global_batch_size=self.cfg.model.data.global_batch_size,
                     data_parallel_rank=self.dp_rank,
                     data_parallel_size=self.dp_size,
                     drop_last=drop_last,
                     pad_samples_to_global_batch_size=pad_samples_to_global_batch_size,
                 )
-            elif self.cfg.data.dataloader_type == "cyclic":
+            elif self.cfg.model.data.dataloader_type == "cyclic":
                 batch_sampler = MegatronPretrainingRandomBatchSampler(
                     total_samples=len(dataset),
                     consumed_samples=consumed_samples,
-                    micro_batch_size=self.cfg.data.micro_batch_size,
-                    global_batch_size=self.cfg.data.global_batch_size,
+                    micro_batch_size=self.cfg.model.data.micro_batch_size,
+                    global_batch_size=self.cfg.model.data.global_batch_size,
                     data_parallel_rank=self.dp_rank,
                     data_parallel_size=self.dp_size,
-                    drop_last=self.cfg.data.get("drop_last", True),
+                    drop_last=self.cfg.model.data.get("drop_last", True),
                     pad_samples_to_global_batch_size=pad_samples_to_global_batch_size,
                 )
             else:
-                raise ValueError('cfg.data.dataloader_type must be "single" or "cyclic"')
+                raise ValueError('cfg.model.data.dataloader_type must be "single" or "cyclic"')  # TODO: Change to Enum
         else:
-            raise ValueError('cfg.data.dataloader_type not found. Must be "single" or "cyclic"')
+            raise ValueError('cfg.model.data.dataloader_type not found. Must be "single" or "cyclic"')
 
         return torch.utils.data.DataLoader(
             dataset,
             batch_sampler=batch_sampler,
-            num_workers=self.cfg.data.num_workers,
+            num_workers=self.cfg.model.data.num_workers,
             pin_memory=False,
             prefetch_factor=1,
         )
@@ -176,20 +176,25 @@ class MegatronDataModule(BaseDataModule):
         if self.trainer.limit_val_batches > 1.0 and isinstance(self.trainer.limit_val_batches, float):
             raise ValueError("limit_val_batches must be an integer or float less than or equal to 1.0.")
 
-        if hasattr(self.cfg.data, "validation_ds") and self.cfg.data.validation_ds.get("file_names", None) is not None:
+        if (
+            hasattr(self.cfg.model.data, "validation_ds")
+            and self.cfg.model.data.validation_ds.get("file_names", None) is not None
+        ):
             logging.info("Building GPT SFT validation datasets.")
             # Wrap this in a list since the general finetuning parent class supports multi-validation.
-            self._validation_ds = self._build_dataset(self.cfg.data.validation_ds, is_train=False, is_validation=True)
+            self._validation_ds = self._build_dataset(
+                self.cfg.model.data.validation_ds, is_train=False, is_validation=True
+            )
             logging.info(f"Length of val dataset: {len(self._validation_ds)}")
 
-        if hasattr(self.cfg.data, "test_ds") and self.cfg.data.test_ds.get("file_names", None) is not None:
+        if hasattr(self.cfg.model.data, "test_ds") and self.cfg.model.data.test_ds.get("file_names", None) is not None:
             logging.info("Building GPT SFT test datasets.")
             # Wrap this in a list since the general finetuning parent class supports multi-validation.
-            self._test_ds = self._build_dataset(self.cfg.data.test_ds, is_train=False)
+            self._test_ds = self._build_dataset(self.cfg.model.data.test_ds, is_train=False)
             logging.info(f"Length of test dataset: {len(self._test_ds[0])}")
 
         logging.info("Building GPT SFT training datasets.")
-        self._train_ds = self._build_dataset(self.cfg.data.train_ds)
+        self._train_ds = self._build_dataset(self.cfg.model.data.train_ds)
         logging.info(f"Length of train dataset: {len(self._train_ds)}")
 
     def _build_dataset(self, data_cfg, is_train=True, is_validation=False):
@@ -229,7 +234,7 @@ class MegatronDataModule(BaseDataModule):
             data_prefix.append(weight)
             data_prefix.append(prefix)
 
-        num_train_samples = [max_steps * self.cfg.data.global_batch_size]
+        num_train_samples = [max_steps * self.cfg.model.data.global_batch_size]
         _, _, num_train_samples_per_dataset = get_datasets_weights_and_num_samples(data_prefix, num_train_samples)
         num_train_samples_after_blend = sum([x[0] for x in num_train_samples_per_dataset])
 
@@ -297,8 +302,8 @@ class MegatronDataModule(BaseDataModule):
         batch_sampler = MegatronPretrainingBatchSampler(
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
-            micro_batch_size=self.cfg.data.micro_batch_size,
-            global_batch_size=self.cfg.data.global_batch_size,
+            micro_batch_size=self.cfg.model.data.micro_batch_size,
+            global_batch_size=self.cfg.model.data.global_batch_size,
             data_parallel_rank=self.dp_rank,
             data_parallel_size=self.dp_size,
             drop_last=True,
@@ -320,19 +325,23 @@ class MegatronDataModule(BaseDataModule):
         All tokenizers are expected to provide compatible interface.
         Override default Encoder-decoder tokenizer to use legacy=True for sentencepiece.
         """
-        if hasattr(self.cfg.data.tokenizer, "sentencepiece_legacy"):
-            legacy = self.cfg.data.tokenizer.sentencepiece_legacy
+        if hasattr(self.cfg.model.data.tokenizer, "sentencepiece_legacy"):
+            legacy = self.cfg.model.data.tokenizer.sentencepiece_legacy
         else:
-            legacy = True if self.cfg.data.tokenizer.library == "sentencepiece" else False
+            legacy = True if self.cfg.model.data.tokenizer.library == "sentencepiece" else False
         self.tokenizer = get_nmt_tokenizer(
-            library=self.cfg.data.tokenizer.library,
-            model_name=self.cfg.data.tokenizer.type,
-            tokenizer_model=self.trainer.model.register_artifact("tokenizer.model", self.cfg.data.tokenizer.model),
-            vocab_file=self.trainer.model.register_artifact("tokenizer.vocab_file", self.cfg.data.tokenizer.vocab_file),
-            merges_file=self.trainer.model.register_artifact(
-                "tokenizer.merge_file", self.cfg.data.tokenizer.merge_file
+            library=self.cfg.model.data.tokenizer.library,
+            model_name=self.cfg.model.data.tokenizer.type,
+            tokenizer_model=self.trainer.model.register_artifact(
+                "tokenizer.model", self.cfg.model.data.tokenizer.model
             ),
-            delimiter=self.cfg.data.tokenizer.get("delimiter", None),
+            vocab_file=self.trainer.model.register_artifact(
+                "tokenizer.vocab_file", self.cfg.model.data.tokenizer.vocab_file
+            ),
+            merges_file=self.trainer.model.register_artifact(
+                "tokenizer.merge_file", self.cfg.model.data.tokenizer.merge_file
+            ),
+            delimiter=self.cfg.model.data.tokenizer.get("delimiter", None),
             legacy=legacy,
         )
 

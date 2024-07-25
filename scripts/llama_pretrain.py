@@ -2,36 +2,25 @@ import hydra
 from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
-from pytorch_lightning import Trainer
+from utils import enable_dummy_sm_env
 
-from sagemaker_nemo_adaptor.collections.data import DummyDataModule, GPTDataModule
+enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
+
 from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
-from sagemaker_nemo_adaptor.collections.parts import SageMakerFSDPStrategy
+from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
+from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 
 
 def train(cfg: DictConfig) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
 
-    smp_config_dict = {
-        "activation_loading_horizon": cfg.activation_loading_horizon,
-        "sm_activation_offloading": cfg.offload_activations > 0,
-    }
-    if cfg.shard_degree is not None:
-        smp_config_dict["hybrid_shard_degree"] = cfg.shard_degree
-    smp_config_dict["tensor_parallel_degree"] = cfg.tensor_model_parallel_degree
-    smp_config_dict["expert_parallel_degree"] = cfg.expert_model_parallel_degree
-    smp_config_dict["random_seed"] = cfg.seed
-    print(f"cfg checker: opt betas {cfg.optim.betas}")
-    strategy = SageMakerFSDPStrategy(use_smp=cfg.use_smp, smp_config_dict=smp_config_dict, model_type=cfg.model_type)
+    trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
+    exp_manager(trainer, cfg.exp_manager)
 
-    trainer = Trainer(
-        strategy=strategy, max_steps=cfg.trainer.max_steps
-    )  # TODO: could be configurable with cfg.trainer
+    model_module = SageMakerLlamaModel(cfg.model, trainer)
 
-    model = SageMakerLlamaModel(cfg, trainer)
-    dm = DummyDataModule(cfg, trainer) if cfg.data.use_synthetic_data else GPTDataModule(cfg, trainer)
-    trainer.fit(model, datamodule=dm)
+    trainer.fit(model_module, datamodule=data_module)
 
 
 @hydra.main(config_path="conf", config_name="smp_llama_config", version_base="1.2")
