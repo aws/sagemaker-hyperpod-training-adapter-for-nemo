@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from typing import Any, Dict, Optional, Union
 
 import torch
@@ -38,7 +39,7 @@ class SageMakerNLPBaseModel(NLPModel):
     """
     General Lightning Model class for SageMaker adaptor, it deals with general model/optimizer setup
     and training/eval behaviors.
-    User will need to either consume the provided inheritors or inherite and implement their own model class.
+    User will need to either consume the provided inheritors or inherit and implement their own model class.
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp=True, no_lm_init=True):
@@ -48,7 +49,7 @@ class SageMakerNLPBaseModel(NLPModel):
 
         self.use_smp = use_smp
         self._cfg = cfg
-
+        self.model = None
         self.grad_norm = None
         super().__init__(cfg, trainer, no_lm_init)
 
@@ -109,6 +110,10 @@ class SageMakerNLPBaseModel(NLPModel):
         mixed_precision_policy = set_mixed_precision_recipe(precision=self._cfg.precision, use_smp=self.use_smp)
         sharding_strategy = get_sharding_strategy(self._cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(self._cfg.backward_fetch_policy)
+        delayed_param_initer = None
+        param_init_fn = None
+        post_param_init_fn = None
+        model_context = nullcontext()
 
         if self._cfg.delayed_param:
             if self._cfg.finetune_with_pretrained_weights:
@@ -120,15 +125,11 @@ class SageMakerNLPBaseModel(NLPModel):
         if delayed_param_initer:
             param_init_fn = delayed_param_initer.get_param_init_fn()
             post_param_init_fn = delayed_param_initer.get_post_param_init_fn()
-        else:
-            param_init_fn = None
-            post_param_init_fn = None
 
-        with (
-            delayed_param_initer.validate_params_and_buffers_inited()
-            if (delayed_param_initer and not self._cfg.finetune_with_pretrained_weights)
-            else nullcontext()
-        ):
+            if not self._cfg.finetune_with_pretrained_weights:
+                model_context = delayed_param_initer.validate_params_and_buffers_inited()
+
+        with model_context:
             self.model = FSDP(
                 module=self.model,
                 auto_wrap_policy=auto_wrap_policy,
@@ -219,14 +220,16 @@ class SageMakerNLPBaseModel(NLPModel):
         Inherit from nemo with removing megatron specific optimization implementation, i.e. distributed adam
         """
         # Ensure `max_steps` is set correctly
-        optim_config = self._optim_config_copy(optim_config)
-        if optim_config is not None and "sched" in optim_config and optim_config.sched.get("max_steps") is None:
-            with open_dict(optim_config):
-                optim_config.sched.max_steps = self._get_max_steps()
+        optim_config_cp = self._optim_config_copy(optim_config) or {}
+        max_steps = optim_config_cp.get("sched", {}).get("max_steps")
+
+        if "sched" in optim_config_cp and max_steps is None:
+            with open_dict(optim_config_cp):
+                optim_config_cp.sched.max_steps = self._get_max_steps()
 
         optim_kwargs = {} if optim_kwargs is None else optim_kwargs.copy()
 
-        return super().setup_optimization(optim_config=optim_config, optim_kwargs=optim_kwargs)
+        return super().setup_optimization(optim_config=optim_config_cp, optim_kwargs=optim_kwargs)
 
     def configure_optimizers(self):
         """
@@ -285,46 +288,43 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         if self._cfg.lr_decay_iters is not None:
             return self._cfg.lr_decay_iters
-        else:
-            if getattr(self, "_trainer", None) is None:
-                logging.warning("Cannot compute `max_steps` as no trainer is set")
-                return -1
 
-            if self._trainer.max_steps >= 0:
-                # Note that when `trainer.max_steps` is defined, we ignore `max_epochs` (even if training may end
-                # before `max_steps` is reached due to `max_epochs`). This is for backward compatibility with older
-                # versions of NeMo.
-                if self._trainer.max_epochs is not None and self._trainer.max_epochs >= 0:
-                    logging.warning(
-                        "Ignoring `trainer.max_epochs` when computing `max_steps` because `trainer.max_steps` is already "
-                        f"set to {self._trainer.max_steps}."
-                    )
-                return self._trainer.max_steps
+        if getattr(self, "_trainer", None) is None:
+            _logger.warning("Cannot compute `max_steps` as no trainer is set")
+            return -1
 
-            if self._trainer.max_epochs is None or self._trainer.max_epochs < 0:
-                logging.warning(
-                    "Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set"
+        if self._trainer.max_steps >= 0:
+            # Note that when `trainer.max_steps` is defined, we ignore `max_epochs` (even if training may end
+            # before `max_steps` is reached due to `max_epochs`). This is for backward compatibility with older
+            # versions of NeMo.
+            if self._trainer.max_epochs is not None and self._trainer.max_epochs >= 0:
+                _logger.warning(
+                    "Ignoring `trainer.max_epochs` when computing `max_steps` because `trainer.max_steps` is already "
+                    f"set to {self._trainer.max_steps}."
                 )
-                return -1
+            return self._trainer.max_steps
 
-            if getattr(self, "_train_dl", None) is None:
-                logging.warning(
-                    "Cannot compute `max_steps` from the number of epochs as the train dataloader is not set"
-                )
-                return -1
+        if self._trainer.max_epochs is None or self._trainer.max_epochs < 0:
+            _logger.warning("Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set")
+            return -1
 
-            # The number of training step per epoch is typically the number of global batches in the training set...
-            num_global_batches = len(self.datamodule._train_dl)
-            steps_per_epoch = num_global_batches
+        if getattr(self, "_train_dl", None) is None:
+            _logger.warning("Cannot compute `max_steps` from the number of epochs as the train dataloader is not set")
+            return -1
 
-            # ... unless it is constrained by the `limit_train_batches` option.
-            limit_batches = self._trainer.limit_train_batches
-            if limit_batches is not None:
-                if isinstance(limit_batches, float):
-                    limit_batches = int(limit_batches * num_global_batches)
-                steps_per_epoch = min(num_global_batches, limit_batches)
+        # The number of training step per epoch is typically the number of global batches in the training set...
+        num_global_batches = len(self.datamodule._train_dl)
+        steps_per_epoch = num_global_batches
 
-            return steps_per_epoch * self._trainer.max_epochs
+        # ... unless it is constrained by the `limit_train_batches` option.
+        limit_batches = self._trainer.limit_train_batches
+        if limit_batches is not None:
+            if isinstance(limit_batches, float):
+                limit_batches = int(limit_batches * num_global_batches)
+
+            steps_per_epoch = min(num_global_batches, limit_batches)
+
+        return steps_per_epoch * self._trainer.max_epochs
 
     def list_available_models(self):
         """Override Nemo's abstract class"""

@@ -1,5 +1,6 @@
 # log and data files
 outputs/
+lightning_logs/
 trace
 .DS_Store
 .hydra
