@@ -8,7 +8,7 @@ from pytorch_lightning import Trainer
 from sagemaker_nemo_adaptor.collections.model.sagemaker_base_model import (
     SageMakerNLPBaseModel,
 )
-from tests.fixtures.adaptor_config import testing_config  # noqa F401
+from tests.fixtures.adaptor_config import full_config  # noqa F401
 from tests.fixtures.loggers import sagemaker_logger  # noqa F401
 
 """
@@ -16,11 +16,11 @@ UTILITY FUNCTIONS
 """
 
 
-def build_base_model(cfg: DictConfig = {}, trainer=None):
+def build_base_model(model_cfg: DictConfig = {}, trainer=None):
     if trainer is None:
         trainer = Trainer()
 
-    return SageMakerNLPBaseModel(cfg, trainer)
+    return SageMakerNLPBaseModel(model_cfg, trainer)
 
 
 """
@@ -28,8 +28,8 @@ TESTS
 """
 
 
-def test_init(testing_config):
-    base = build_base_model(testing_config)
+def test_init(full_config):
+    base = build_base_model(full_config.model)
     assert isinstance(base, NLPModel)
     assert isinstance(base, SageMakerNLPBaseModel)
 
@@ -55,30 +55,30 @@ class TestSetupOptimization:
         mocker.resetall()
         yield
 
-    def test_no_args(self, testing_config):
+    def test_no_args(self, full_config):
         # from config file, max_steps should not be defined
-        assert testing_config.optim.sched.get("max_steps") is None
+        assert full_config.model.optim.sched.get("max_steps") is None
 
-        optimizer_with_max_steps = self.get_optim_cfg_with_max_steps(testing_config)
-        base = build_base_model(testing_config)
+        optimizer_with_max_steps = self.get_optim_cfg_with_max_steps(full_config)
+        base = build_base_model(full_config.model)
         base.setup_optimization()
 
         self.shared_assertions(optimizer_with_max_steps)
 
-    def test_with_args(self, testing_config):
+    def test_with_args(self, full_config):
         # from config file, max_steps should not be defined
-        assert testing_config.optim.sched.get("max_steps") is None
+        assert full_config.model.optim.sched.get("max_steps") is None
 
-        optimizer_with_max_steps = self.get_optim_cfg_with_max_steps(testing_config)
-        base = build_base_model(testing_config)
+        optimizer_with_max_steps = self.get_optim_cfg_with_max_steps(full_config)
+        base = build_base_model(full_config.model)
 
-        base.setup_optimization(optim_config=testing_config.optim, optim_kwargs={})
+        base.setup_optimization(optim_config=full_config.model.optim, optim_kwargs={})
 
         self.shared_assertions(optimizer_with_max_steps)
 
-    def get_optim_cfg_with_max_steps(self, testing_config):
+    def get_optim_cfg_with_max_steps(self, full_config):
         T = TestSetupOptimization
-        optimizer_with_max_steps = OmegaConf.to_container(testing_config.optim)
+        optimizer_with_max_steps = OmegaConf.to_container(full_config.model.optim)
         optimizer_with_max_steps["sched"]["max_steps"] = T.max_steps
 
         return optimizer_with_max_steps
@@ -95,19 +95,19 @@ class TestSetupOptimization:
 
 
 class Test_GetMaxSteps:
-    def test_lr_decay_iters_is_defined(self, testing_config):
-        assert testing_config.lr_decay_iters is not None
+    def test_lr_decay_iters_is_defined(self, full_config):
+        assert full_config.model.lr_decay_iters is not None
 
-        base = build_base_model(testing_config)
+        base = build_base_model(full_config.model)
         res = base._get_max_steps()
-        assert res == testing_config.lr_decay_iters
+        assert res == full_config.model.lr_decay_iters
 
-    def test_trainer_is_missing(self, testing_config, mocker, sagemaker_logger):
+    def test_trainer_is_missing(self, full_config, mocker, sagemaker_logger):
         warning_spy = mocker.spy(sagemaker_logger, "warning")
 
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = None
 
         # test
@@ -118,12 +118,12 @@ class Test_GetMaxSteps:
         assert warning_spy.call_count == 1
         assert "no trainer is set" in warning_spy.call_args[0][0]
 
-    def test_max_steps_and_max_epochs_gt_zero(self, mocker, testing_config, sagemaker_logger):
+    def test_max_steps_and_max_epochs_gt_zero(self, mocker, full_config, sagemaker_logger):
         warning_spy = mocker.spy(sagemaker_logger, "warning")
 
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = Trainer(max_steps=11, max_epochs=22)
 
         # test
@@ -141,12 +141,12 @@ class Test_GetMaxSteps:
             Trainer(max_steps=-1, max_epochs=-1),
         ],
     )
-    def test_max_stpes_gt_zero(self, mocker, testing_config, sagemaker_logger, test_trainer):
+    def test_max_stpes_gt_zero(self, mocker, full_config, sagemaker_logger, test_trainer):
         warning_spy = mocker.spy(sagemaker_logger, "warning")
 
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = test_trainer
 
         # test
@@ -157,12 +157,12 @@ class Test_GetMaxSteps:
         assert warning_spy.call_count == 1
         assert "neither" in warning_spy.call_args[0][0]
 
-    def test_max_epochs_is_none(self, mocker, testing_config, sagemaker_logger):
+    def test_max_epochs_is_none(self, mocker, full_config, sagemaker_logger):
         warning_spy = mocker.spy(sagemaker_logger, "warning")
 
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = Trainer(max_steps=-1, max_epochs=22)
         base._train_dl = None
 
@@ -174,10 +174,10 @@ class Test_GetMaxSteps:
         assert warning_spy.call_count == 1
         assert "train dataloader" in warning_spy.call_args[0][0]
 
-    def test_limit_train_batches_is_defined(self, testing_config):
+    def test_limit_train_batches_is_defined(self, full_config):
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = trainer = Trainer(max_steps=-1, max_epochs=2, limit_train_batches=0.8)
         dm = OmegaConf.create(
             {
@@ -199,10 +199,10 @@ class Test_GetMaxSteps:
         assert res == steps_per_epoch * trainer.max_epochs
         assert res == expected
 
-    def test_limit_train_batches_is_none(self, testing_config):
+    def test_limit_train_batches_is_none(self, full_config):
         # prepare
-        testing_config.lr_decay_iters = None
-        base = build_base_model(testing_config)
+        full_config.model.lr_decay_iters = None
+        base = build_base_model(full_config.model)
         base._trainer = trainer = Trainer(max_steps=-1, max_epochs=2, limit_train_batches=None)
         dm = OmegaConf.create(
             {

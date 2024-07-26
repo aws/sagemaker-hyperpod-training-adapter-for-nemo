@@ -51,7 +51,7 @@ def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
     """Get transformer layer."""
     if use_smp and not moe:
         # For pt-2.1-tsm-2.1 releases and below,
-        # We can't checkpoint our transformer. TransformerLayer class as it takes a tuple as input,
+        # We can't checkpoint our transformer.TransformerLayer class as it takes a tuple as input,
         # so we checkpoint the te.TETransformerLayer directly instead.
         # In later versions, we patch TransformerEngine activation checkpointing logic in our containers
         # with some missing native PyTorch checkpoint logic and bug fixes to resolve this.
