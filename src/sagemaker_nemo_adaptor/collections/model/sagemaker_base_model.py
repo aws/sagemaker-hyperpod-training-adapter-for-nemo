@@ -168,15 +168,18 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         Initialize model and configure flash attention
         """
-        if self._cfg.pretrained_model_weights:
-            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_weights)
+        if self._cfg.pretrained_model_name_or_path:
+            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_name_or_path)
+
             if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    self._cfg.pretrained_model_weights, config=model_config
+                    self._cfg.pretrained_model_name_or_path, config=model_config
                 )
             else:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    self._cfg.pretrained_model_weights, attn_implementation="flash_attention_2", config=model_config
+                    self._cfg.pretrained_model_name_or_path,
+                    attn_implementation="flash_attention_2",
+                    config=model_config,
                 )
         else:
             if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
@@ -193,12 +196,13 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         raise NotImplementedError(f"configure_flash_attn is not implemented for {typr(self).__name__}")
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         """
         General training forward steps, backward/optimizer step will be done by PTL
         User can also skip auto optimization with self.automatic_optimization=False
         """
         input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
+
         # uses default causal mask
         if self._cfg.fp8 and self.use_smp:
             with transformer_engine.pytorch.fp8_autocast(
@@ -275,9 +279,10 @@ class SageMakerNLPBaseModel(NLPModel):
             loss_detached = self.loss.detach()
             dist.all_reduce(loss_detached)
             loss_scalar = loss_detached.item() / dist.get_world_size()
+            return loss_scalar
         else:
             loss_scalar = self.loss.item()
-        return loss_scalar
+            return loss_scalar
 
     def _get_max_steps(self):
         """

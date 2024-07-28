@@ -81,7 +81,8 @@ model:
   do_finetune: False
   finetune_with_pretrained_weights: False
 
-  pretrained_model_weights: null
+  # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
+  pretrained_model_name_or_path: null
 
   precision: ${trainer.precision}
 

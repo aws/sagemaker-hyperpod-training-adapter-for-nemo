@@ -10,17 +10,21 @@ from sagemaker_nemo_adaptor.collections.model.sagemaker_base_model import (
 )
 from tests.fixtures.adaptor_config import full_config  # noqa F401
 from tests.fixtures.loggers import sagemaker_logger  # noqa F401
+from tests.utils import NestedDotMap
+
+MODULE_PATH = "sagemaker_nemo_adaptor.collections.model.sagemaker_base_model"
+
 
 """
 UTILITY FUNCTIONS
 """
 
 
-def build_base_model(model_cfg: DictConfig = {}, trainer=None):
+def build_base_model(model_cfg: DictConfig = {}, trainer=None, use_smp=True):
     if trainer is None:
         trainer = Trainer()
 
-    return SageMakerNLPBaseModel(model_cfg, trainer)
+    return SageMakerNLPBaseModel(model_cfg, trainer, use_smp)
 
 
 """
@@ -29,12 +33,167 @@ TESTS
 
 
 def test_init(full_config):
+    """__init__()"""
     base = build_base_model(full_config.model)
     assert isinstance(base, NLPModel)
     assert isinstance(base, SageMakerNLPBaseModel)
 
 
+transformers_threshold_version = "4.37.1"
+transformers_below_version = "4.37.0"
+
+
+class TestBuildModel:
+    """build_model()"""
+
+    transformers_threshold_version = "4.37.1"
+    transformers_below_version = "4.37.0"
+
+    @pytest.mark.parametrize(
+        ("version", "exp_args_len", "exp_kwargs_len"),
+        [
+            [transformers_below_version, 1, 1],
+            [transformers_threshold_version, 1, 2],
+        ],
+    )
+    def test_w_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
+        from_pretrained_stub = mocker.stub()
+        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
+        auto_model_mock.from_pretrained = from_pretrained_stub
+        transformers_mock.__version__ = version
+
+        # prepare
+        full_config.model.pretrained_model_name_or_path = "test/path"
+        base = build_base_model(full_config.model)
+
+        # test
+        base.build_model(full_config.model)
+
+        # assertions
+        args, kwargs = from_pretrained_stub.call_args
+        from_pretrained_stub.assert_called_once()
+        assert len(args) == exp_args_len
+        assert len(kwargs) == exp_kwargs_len
+        assert args[0] == full_config.model.pretrained_model_name_or_path
+
+    @pytest.mark.parametrize(
+        ("version", "exp_args_len", "exp_kwargs_len"),
+        [
+            [transformers_below_version, 1, 0],
+            [transformers_threshold_version, 1, 1],
+        ],
+    )
+    def test_no_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
+        from_config_stub = mocker.stub()
+        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
+        auto_model_mock.from_config = from_config_stub
+        transformers_mock.__version__ = version
+        test_model_config = {}
+        base = build_base_model(full_config.model)
+
+        # test
+        base.build_model(test_model_config)
+
+        # assertions
+        args, kwargs = from_config_stub.call_args
+        from_config_stub.assert_called_once()
+        assert len(args) == exp_args_len
+        assert len(kwargs) == exp_kwargs_len
+        assert args[0] == test_model_config
+
+    def test_use_smp_flash_attn(self, full_config, mocker):
+        from_pretrained_stub = mocker.stub()
+        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
+        auto_model_mock.from_pretrained = from_pretrained_stub
+        transformers_mock.__version__ = transformers_threshold_version
+        test_model_config = {}
+
+        # prepare for False
+        full_config.model.use_smp_flash_attn = False
+        base = build_base_model(full_config.model)
+        configure_flash_attn_mock = mocker.patch.object(base, "configure_flash_attn")
+
+        # test
+        base.build_model(test_model_config)
+        configure_flash_attn_mock.assert_not_called()
+
+        # prepare for True
+        full_config.model.use_smp_flash_attn = True
+        base = build_base_model(full_config.model)
+        configure_flash_attn_mock = mocker.patch.object(base, "configure_flash_attn")
+
+        # test
+        base.build_model(test_model_config)
+        configure_flash_attn_mock.assert_called_once()
+
+    def get_test_mocks(self, mocker):
+        auto_model_mock = mocker.patch(MODULE_PATH + ".AutoModelForCausalLM")
+        transformers_mock = mocker.patch(
+            MODULE_PATH + ".transformers",
+        )
+        return auto_model_mock, transformers_mock
+
+
+class TestTrainingStep:
+    """training_step()"""
+
+    class TrainerMock:
+        def __init__(self):
+            self.datamodule = NestedDotMap({"get_batch": None})
+
+    def test_fp8_and_use_smp(self, full_config, mocker):
+        fp8_autocast_mock = mocker.patch(MODULE_PATH + ".transformer_engine.pytorch.fp8_autocast")
+        test_loss = 22
+
+        # prepare
+        full_config.model.fp8 = True
+        base = build_base_model(full_config.model, Trainer(), True)
+        base.trainer = TestTrainingStep.TrainerMock()
+        base.trainer.datamodule.get_batch = mocker.Mock(return_value=[[], None, []])
+        base.model = model_mock = mocker.Mock(return_value={"loss": test_loss})
+        base.fp8_recipe = "test_fp8_recipe"
+
+        # test
+        base.training_step(None)
+
+        # assertions
+        base.trainer.datamodule.get_batch.assert_called_once()
+        fp8_autocast_mock.assert_called_once()
+        model_mock.assert_called_once()
+        assert base.loss == test_loss
+
+    @pytest.mark.parametrize(
+        ("fp8", "use_smp"),
+        [
+            [True, False],
+            [False, True],
+            [False, False],
+        ],
+    )
+    def test_no_fp8_and_use_smp(self, full_config, mocker, fp8, use_smp):
+        fp8_autocast_mock = mocker.patch(MODULE_PATH + ".transformer_engine.pytorch.fp8_autocast")
+        test_loss = 22
+
+        # prepare
+        full_config.model.fp8 = fp8
+        base = build_base_model(full_config.model, Trainer(), use_smp)
+        base.trainer = TestTrainingStep.TrainerMock()
+        base.trainer.datamodule.get_batch = mocker.Mock(return_value=[[], None, []])
+        base.model = model_mock = mocker.Mock(return_value={"loss": test_loss})
+
+        # test
+        base.training_step(None)
+
+        # assertions
+        base.trainer.datamodule.get_batch.assert_called_once()
+        fp8_autocast_mock.assert_not_called()
+        model_mock.assert_called_once()
+        assert base.loss == test_loss
+
+
 class TestSetupOptimization:
+    """setup_optimization()"""
+
     max_steps = None
     setup_optimization_spy = None
     _get_max_steps_spy = None
@@ -48,7 +207,7 @@ class TestSetupOptimization:
             T.max_steps = 5
             T.setup_optimization_spy = mocker.patch("nemo.collections.nlp.models.nlp_model.NLPModel.setup_optimization")
             T._get_max_steps_spy = mocker.patch(
-                "sagemaker_nemo_adaptor.collections.model.sagemaker_base_model.SageMakerNLPBaseModel._get_max_steps",
+                MODULE_PATH + ".SageMakerNLPBaseModel._get_max_steps",
                 return_value=T.max_steps,
             )
 
@@ -94,7 +253,69 @@ class TestSetupOptimization:
         assert kwargs["optim_kwargs"] == {}
 
 
+def test_on_train_batch_end(full_config, mocker):
+    """on_train_batch_end()"""
+
+    test_process_log = "test_process_log"
+    base = build_base_model(full_config.model)
+    _process_loss_mock = mocker.patch.object(base, "_process_loss", return_value=test_process_log)
+    log_mock = mocker.patch.object(base, "log")
+
+    # test
+    base.on_train_batch_end()
+
+    # assertions
+    _process_loss_mock.assert_called_once()
+    log_mock.assert_called_once_with("loss", test_process_log, prog_bar=True)
+
+
+class TestProcessLoss:
+    """_process_loss()"""
+
+    def test_w_log_reduced_training_loss(self, full_config, mocker):
+        test_loss_detach_item = 10
+        test_world_size = 2
+        dist_all_reduce_mock = mocker.patch(MODULE_PATH + ".dist")
+
+        # prepare
+        dist_all_reduce_mock.all_reduce = mocker.Mock(return_value=test_loss_detach_item)
+        dist_all_reduce_mock.get_world_size = mocker.Mock(return_value=test_world_size)
+        full_config.model.log_reduced_training_loss = True
+        base = build_base_model(full_config.model)
+        base.loss = NestedDotMap(
+            {
+                "detach": mocker.Mock(
+                    return_value=NestedDotMap({"item": mocker.Mock(return_value=test_loss_detach_item)})
+                )
+            }
+        )
+
+        # test
+        res = base._process_loss()
+
+        # assertions
+        assert res == test_loss_detach_item / test_world_size  # 10 / 2 == 5
+        dist_all_reduce_mock.all_reduce.assert_called_once()
+        dist_all_reduce_mock.get_world_size.assert_called_once()
+
+    def test_no_log_reduced_training_loss(self, full_config, mocker):
+        test_loss_item = 10
+
+        # prepare
+        full_config.model.log_reduced_training_loss = False
+        base = build_base_model(full_config.model)
+        base.loss = NestedDotMap({"item": mocker.Mock(return_value=test_loss_item)})
+
+        # test
+        res = base._process_loss()
+
+        # assertions
+        assert res == test_loss_item
+
+
 class Test_GetMaxSteps:
+    """_get_max_steps()"""
+
     def test_lr_decay_iters_is_defined(self, full_config):
         assert full_config.model.lr_decay_iters is not None
 
