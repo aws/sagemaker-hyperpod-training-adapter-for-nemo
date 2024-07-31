@@ -196,7 +196,7 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         raise NotImplementedError(f"configure_flash_attn is not implemented for {typr(self).__name__}")
 
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx):
         """
         General training forward steps, backward/optimizer step will be done by PTL
         User can also skip auto optimization with self.automatic_optimization=False

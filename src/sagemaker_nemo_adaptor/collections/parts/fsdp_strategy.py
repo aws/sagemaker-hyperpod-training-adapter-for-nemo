@@ -83,15 +83,18 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             param_dtype = reduce_dtype = torch.float
         else:
             raise ValueError(f"Was unable to infer precision type, received {precision!r}.")
+
         # Over-write gradient reduction dtype to support bf16 computation with fp32 grad reduction
         if grad_reduce_dtype is not None:
             reduce_dtype = utils_funcs.torch_dtype_from_precision(grad_reduce_dtype, None)
+
         # Some models in HF such as llama hard code buffers to fp32,
         # to be similar with that we set this to fp32 unless specified by user
         if set_buffer_dtype is not None:
             buffer_dtype = utils_funcs.torch_dtype_from_precision(buffer_dtype, None)
         else:
             buffer_dtype = torch.float32 if self.use_smp else param_dtype
+
         return MixedPrecision(
             param_dtype=param_dtype,
             reduce_dtype=reduce_dtype,
@@ -167,10 +170,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def setup(self, trainer: "pl.Trainer") -> None:
         super(NLPFSDPStrategy, self).setup(trainer)
-
-        if torch.distributed.get_rank() == 0:
-            print(f"strategy model is {self.model}")
-            print(f"strategy lt model is {self.lightning_module}")
 
     def setup_environment(self) -> None:
         """

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+
 class NestedDotMap(SimpleNamespace):
     """
     Dictionary-like class for creating nested attributes that can be accesssed using dot notation. For example:
@@ -7,7 +8,7 @@ class NestedDotMap(SimpleNamespace):
     dot_map = NestedDotMap({
         'country': {
             'city': 'London'
-        } 
+        }
     })
 
     dot_map.country.city == "London"

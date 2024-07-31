@@ -73,4 +73,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the LICENSE NAME HERE License.
-

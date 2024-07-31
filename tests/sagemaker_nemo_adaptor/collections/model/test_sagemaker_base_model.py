@@ -154,7 +154,7 @@ class TestTrainingStep:
         base.fp8_recipe = "test_fp8_recipe"
 
         # test
-        base.training_step(None)
+        base.training_step(None, None)
 
         # assertions
         base.trainer.datamodule.get_batch.assert_called_once()
@@ -182,7 +182,7 @@ class TestTrainingStep:
         base.model = model_mock = mocker.Mock(return_value={"loss": test_loss})
 
         # test
-        base.training_step(None)
+        base.training_step(None, None)
 
         # assertions
         base.trainer.datamodule.get_batch.assert_called_once()

@@ -1,0 +1,122 @@
+from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
+from pytorch_lightning import Trainer
+from nemo.utils import AppState
+
+from sagemaker_nemo_adaptor.collections.parts.fsdp_strategy import SageMakerFSDPStrategy
+from tests.fixtures.adaptor_config import full_config  # noqa F401
+
+
+MODULE_PATH = 'sagemaker_nemo_adaptor.collections.parts.fsdp_strategy'
+
+"""
+TESTS
+"""
+
+def test_init(full_config):
+    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    assert isinstance(strategy, NLPFSDPStrategy)
+    assert isinstance(strategy, SageMakerFSDPStrategy)
+    assert strategy.cfg == full_config
+    assert strategy.use_smp == True
+    assert strategy.smp_config_dict == {}
+
+
+class Test_set_mixed_precision_recipe:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_setup_model:
+    """Pending: Requires further implementation"""
+    pass
+
+
+def test_setup(mocker, full_config):
+    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    parent_cls = strategy.__class__.__bases__[0]
+    grandparent_cls = parent_cls.__bases__[0]
+    parent_cls.setup = parent_setup_mock = mocker.Mock()
+    grandparent_cls.setup = grandparent_setup_mock = mocker.Mock()
+
+    # test
+    test_trainer = Trainer()
+    strategy.setup(test_trainer)
+
+    # assertions
+    parent_setup_mock.assert_not_called()
+    grandparent_setup_mock.assert_called_once_with(test_trainer)
+
+
+def test_setup_environment(mocker, full_config):
+    # tst setup
+    test_tsm_rank = 21
+    tsm_mock = mocker.patch(MODULE_PATH + '.tsm', return_value=test_tsm_rank)
+
+    # strategy setup
+    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    parent_cls = strategy.__class__.__bases__[0]
+    grandparent_cls = parent_cls.__bases__[0]
+    parent_cls.setup_environment = parent_setup_mock = mocker.Mock()
+    grandparent_cls.setup_environment = grandparent_setup_mock = mocker.Mock()
+
+    # attributes setup
+    world_size = strategy.world_size
+    global_rank = strategy.global_rank
+    local_rank = strategy.local_rank
+    test_tensor_parallel_degree = 4
+    strategy.smp_config_dict = {'tensor_parallel_degree': test_tensor_parallel_degree}
+
+    # test
+    strategy.setup_environment()
+
+    # assertions
+    parent_setup_mock.assert_not_called()
+    grandparent_setup_mock.assert_called_once()
+    tsm_mock.init.assert_called_once()
+
+    app_state = AppState()
+    assert app_state.world_size == world_size
+    assert app_state.global_rank == global_rank
+    assert app_state.local_rank == local_rank
+    assert app_state.data_parallel_size == world_size // test_tensor_parallel_degree
+    assert app_state._is_megatron_initialized == True
+
+
+class Test_lightning_module_state_dict:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_optimizer_state:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_load_model_state_dict:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_load_optimizer_state_dict:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_save_checkpoint:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_load_checkpoint:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_remove_checkpoint:
+    """Pending: Requires further implementation"""
+    pass
+
+
+class Test_restore_checkpoint_after_setup:
+    """Pending: Requires further implementation"""
+    pass
