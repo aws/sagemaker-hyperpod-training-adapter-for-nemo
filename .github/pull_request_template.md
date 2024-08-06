@@ -1,11 +1,16 @@
-## Merge Checklist
-Put an x in the boxes that apply. If you're unsure about any of them, don't hesitate to ask. We're here to help! This is simply a reminder of what we are going to look for before merging your pull request.
+## Description
 
 ### Motivation
 Explain the motivation
 
 ### Changes
 * List your changes
+
+### Testing
+Explain how the changes were tested
+
+## Merge Checklist
+Put an x in the boxes that apply. If you're unsure about any of them, don't hesitate to ask. We're here to help! This is simply a reminder of what we are going to look for before merging your pull request.
 
 ### General
  - [ ] I have read the [CONTRIBUTING](https://github.com/aws/private-sagemaker-training-adapter-for-nemo-staging/blob/main/CONTRIBUTING.md) doc
