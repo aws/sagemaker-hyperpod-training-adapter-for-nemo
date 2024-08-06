@@ -1,16 +1,16 @@
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
-from pytorch_lightning import Trainer
 from nemo.utils import AppState
+from pytorch_lightning import Trainer
 
 from sagemaker_nemo_adaptor.collections.parts.fsdp_strategy import SageMakerFSDPStrategy
 from tests.fixtures.adaptor_config import full_config  # noqa F401
 
-
-MODULE_PATH = 'sagemaker_nemo_adaptor.collections.parts.fsdp_strategy'
+MODULE_PATH = "sagemaker_nemo_adaptor.collections.parts.fsdp_strategy"
 
 """
 TESTS
 """
+
 
 def test_init(full_config):
     strategy = SageMakerFSDPStrategy(full_config, True, {})
@@ -23,12 +23,10 @@ def test_init(full_config):
 
 class Test_set_mixed_precision_recipe:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_setup_model:
     """Pending: Requires further implementation"""
-    pass
 
 
 def test_setup(mocker, full_config):
@@ -50,7 +48,7 @@ def test_setup(mocker, full_config):
 def test_setup_environment(mocker, full_config):
     # tst setup
     test_tsm_rank = 21
-    tsm_mock = mocker.patch(MODULE_PATH + '.tsm', return_value=test_tsm_rank)
+    tsm_mock = mocker.patch(MODULE_PATH + ".tsm", return_value=test_tsm_rank)
 
     # strategy setup
     strategy = SageMakerFSDPStrategy(full_config, True, {})
@@ -64,7 +62,7 @@ def test_setup_environment(mocker, full_config):
     global_rank = strategy.global_rank
     local_rank = strategy.local_rank
     test_tensor_parallel_degree = 4
-    strategy.smp_config_dict = {'tensor_parallel_degree': test_tensor_parallel_degree}
+    strategy.smp_config_dict = {"tensor_parallel_degree": test_tensor_parallel_degree}
 
     # test
     strategy.setup_environment()
@@ -84,39 +82,31 @@ def test_setup_environment(mocker, full_config):
 
 class Test_lightning_module_state_dict:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_optimizer_state:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_load_model_state_dict:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_load_optimizer_state_dict:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_save_checkpoint:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_load_checkpoint:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_remove_checkpoint:
     """Pending: Requires further implementation"""
-    pass
 
 
 class Test_restore_checkpoint_after_setup:
     """Pending: Requires further implementation"""
-    pass

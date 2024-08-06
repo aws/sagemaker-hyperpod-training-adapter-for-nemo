@@ -8,6 +8,7 @@ enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
 
 from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
+from sagemaker_nemo_adaptor.utils.config_utils import validate_config
 from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 
 
@@ -24,6 +25,7 @@ def train(cfg: DictConfig) -> None:
 
 
 @hydra.main(config_path="conf", config_name="smp_llama_config", version_base="1.2")
+@validate_config
 def main(cfg: DictConfig) -> None:
     train(cfg)
 
