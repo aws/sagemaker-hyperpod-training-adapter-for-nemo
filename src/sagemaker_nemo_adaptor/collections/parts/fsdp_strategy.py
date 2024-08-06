@@ -2,11 +2,9 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
 import torch
-import torch.sagemaker as tsm
 from nemo.collections.nlp.parts import utils_funcs
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from omegaconf.dictconfig import DictConfig
-from torch.distributed.fsdp import MixedPrecision
 
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
 from sagemaker_nemo_adaptor.utils.fsdp_utils import (
@@ -39,6 +37,45 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.cfg = cfg
         self.use_smp = use_smp
         self.smp_config_dict = smp_config_dict
+
+        if self.use_smp:
+            from torch.distributed.fsdp import MixedPrecision
+
+            def _set_mixed_precision_recipe(
+                self, precision: Union[int, str], grad_reduce_dtype: Union[int, str], set_buffer_dtype: Union[int, str]
+            ) -> MixedPrecision:
+                """
+                Set FSDP mixed precision recipe. Over-write Nemo's _set_mixed_precision_recipe function to set buffer dtype
+                to fp32 in smp usecase.
+                `param_dtype` sets the data type for computation in forward and backpropagation, and the parameter
+                data type for optimizer execution is maintained in the full precision.
+                `buffer_dtype` is only valid when a module has buffers by `register_buffer` method, which is not
+                shared by FSDP.
+                `reduce_dtype` sets gradient reduction data type.
+                """
+
+                if precision == 16:
+                    param_dtype = reduce_dtype = torch.float16
+                elif precision == "bf16":
+                    param_dtype = reduce_dtype = torch.bfloat16
+                elif precision == 32:
+                    param_dtype = reduce_dtype = torch.float
+                else:
+                    raise ValueError(f"Was unable to infer precision type, received {precision!r}.")
+                # Over-write gradient reduction dtype to support bf16 computation with fp32 grad reduction
+                if grad_reduce_dtype is not None:
+                    reduce_dtype = utils_funcs.torch_dtype_from_precision(grad_reduce_dtype, None)
+                # Some models in HF such as llama hard code buffers to fp32,
+                # to be similar with that we set this to fp32 unless specified by user
+                if set_buffer_dtype is not None:
+                    buffer_dtype = utils_funcs.torch_dtype_from_precision(buffer_dtype, None)
+                else:
+                    buffer_dtype = torch.float32 if self.use_smp else param_dtype
+                return MixedPrecision(
+                    param_dtype=param_dtype,
+                    reduce_dtype=reduce_dtype,
+                    buffer_dtype=buffer_dtype,
+                )
 
         # # Set the mixed precision recipe TODO: Uncomment this once we moved FSDP setup back to strategy
         # kwargs["mixed_precision"] = self._set_mixed_precision_recipe(
@@ -179,14 +216,17 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         super(NLPFSDPStrategy, self).setup_environment()
 
         # Initialize smp, todo: check whether we still need this for HF case
-        tsm.init(self.smp_config_dict)
+        if self.use_smp:
+            import torch.sagemaker as tsm
+
+            tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         initialize_model_parallel_for_nemo(
             world_size=self.world_size,
             global_rank=self.global_rank,
             local_rank=self.local_rank,
-            tensor_model_parallel_size=self.smp_config_dict["tensor_parallel_degree"],
+            tensor_model_parallel_size=self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1,
             seed=self.cfg.model.seed,
         )
 

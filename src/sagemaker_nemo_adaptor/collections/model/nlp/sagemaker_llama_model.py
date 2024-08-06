@@ -1,4 +1,3 @@
-from torch.sagemaker.nn.huggingface.llama_flashattn import LlamaFlashAttention
 from transformers import LlamaConfig
 
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
@@ -31,23 +30,3 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
             rope_scaling=None,
         )
         return model_config
-
-    def configure_flash_attn(self):
-        """
-        Configure flash attention for Llama
-        """
-        layout = "b s h d"
-        layers = self.model.model.layers
-        attn_name = "self_attn"
-
-        flash_attn_class = LlamaFlashAttention
-        for layer in layers:
-            prev_layer = getattr(layer, attn_name)
-            setattr(layer, attn_name, flash_attn_class(model.config))
-            attn_layer = getattr(layer, attn_name)
-            attn_layer.pretraining_tp = model.config.pretraining_tp
-            with torch.no_grad():
-                attn_layer.q_proj.weight.copy_(prev_layer.q_proj.weight)
-                attn_layer.k_proj.weight.copy_(prev_layer.k_proj.weight)
-                attn_layer.v_proj.weight.copy_(prev_layer.v_proj.weight)
-                attn_layer.o_proj.weight.copy_(prev_layer.o_proj.weight)

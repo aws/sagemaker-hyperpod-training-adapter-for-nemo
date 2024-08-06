@@ -6,10 +6,9 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.distributed as dist
-from torch.sagemaker.logger import get_logger
 
-logger = get_logger()  # TODO: We need a more generic logger method which could be called even w/o rubik
-
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
+_logger = Logger().get_logger()
 
 class GPTPretrainingDataset(torch.utils.data.Dataset):
     """GPT Pretraining Dataset."""
@@ -48,7 +47,7 @@ class GPTPretrainingDataset(torch.utils.data.Dataset):
                 with open(fileobj, "r") as f:
                     self.input_data = [ln for ln in f]
             if dist.get_rank() == 0:
-                logger.debug(f"Read {len(self.input_data)} sequences from file")
+                _logger.debug(f"Read {len(self.input_data)} sequences from file")
 
     def __len__(self) -> int:
         return len(self.input_data)

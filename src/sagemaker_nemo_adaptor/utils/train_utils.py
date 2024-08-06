@@ -13,6 +13,8 @@ from sagemaker_nemo_adaptor.utils.fsdp_utils import get_transformer_layer
 
 # pylint: disable=import-error,import-outside-toplevel,invalid-name,no-member,no-name-in-module,protected-access
 
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
+_logger = Logger().get_logger()
 
 def compute_num_params(model):
     """Get num params."""
@@ -235,7 +237,7 @@ class AnnealingLR:  # pylint: disable=too-many-instance-attributes
         setting them."""
         if self.override_lr_scheduler:
             if self.rank == 0:
-                logger.info(f"Overriding {name} value to {cls_value}")
+                _logger.info(f"Overriding {name} value to {cls_value}")
             return cls_value
 
         if not self.use_checkpoint_lr_scheduler:
@@ -243,7 +245,7 @@ class AnnealingLR:  # pylint: disable=too-many-instance-attributes
                 cls_value == sd_value
             ), f"AnnealingLR: class input value and checkpoint values for {name} do not match"
         if self.rank == 0:
-            logger.info(f" > using checkpoint value {sd_value} for {name}")
+            _logger.info(f" > using checkpoint value {sd_value} for {name}")
         return sd_value
 
     def load_state_dict(self, sd):

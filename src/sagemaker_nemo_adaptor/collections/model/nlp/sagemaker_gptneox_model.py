@@ -32,29 +32,3 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
             hidden_dropout=0.0,
         )
         return model_config
-
-    def configure_flash_attn(self):
-        """
-        Configure flash attention for GPT Neox
-        """
-
-        def new_attn(
-            attn, q, k, v, attention_mask=None, head_mask=None
-        ):  # TODO: check with rubik about the correctness of thi func
-            del attention_mask
-            del head_mask
-            attn_weights = None
-            return (
-                attn.flashmod((q, k, v), causal=True, cast_dtype=dtype, layout=layout),
-                attn_weights,
-            )
-
-        layout = "b s h d"
-        layers = self.model.gpt_neox.layer
-        attn_name = "attention"
-
-        from torch.sagemaker.nn.attn import FlashSelfAttention
-
-        for layer in layers:
-            getattr(layer, attn_name).flashmod = FlashSelfAttention(attention_dropout_prob=0.0)
-            getattr(layer, attn_name)._attn = functools.partial(new_attn, getattr(layer, attn_name))

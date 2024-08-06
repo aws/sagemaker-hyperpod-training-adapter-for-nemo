@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.distributed as dist
-import torch.sagemaker as tsm
 import transformer_engine
 import transformers
 from accelerate import init_empty_weights
@@ -13,10 +12,6 @@ from omegaconf.dictconfig import DictConfig
 from packaging import version as pversion
 from pytorch_lightning import Trainer
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.sagemaker import transform
-from torch.sagemaker.delayed_param import DelayedParamIniter
-from torch.sagemaker.grad_norm import clip_grad_norm_
-from torch.sagemaker.logger import get_logger
 from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM
 
@@ -31,8 +26,10 @@ from sagemaker_nemo_adaptor.utils.train_utils import (
     compute_num_params,  # TODO: Find a more integrated way to compute num params, probably using lightning ModelSummary: https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.ModelSummary.html#lightning.pytorch.callbacks.ModelSummary
 )
 from sagemaker_nemo_adaptor.utils.train_utils import apply_activation_checkpoint
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
+_logger = Logger().get_logger()
 
-_logger = get_logger()
+tf_version = pversion.parse(transformers.__version__)
 
 
 class SageMakerNLPBaseModel(NLPModel):
@@ -46,12 +43,14 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         no_lm_init: Will only be False for BERT model
         """
-
-        self.use_smp = use_smp
         self._cfg = cfg
+        self.use_smp = use_smp
         self.model = None
         self.grad_norm = None
         super().__init__(cfg, trainer, no_lm_init)
+        # Only use custom grad clipping if using smp optimizations
+        if self.use_smp:
+            self.configure_gradient_clipping = self._smp_configure_gradient_clipping
 
     def get_model_config(self):
         """
@@ -86,6 +85,8 @@ class SageMakerNLPBaseModel(NLPModel):
         if self.use_smp:
             moe_config = None  # TODO: Add moe support
             load_state_dict_from_rank0 = self._cfg.finetune_with_pretrained_weights
+            from torch.sagemaker import transform
+
             self.model = transform(
                 self.model,
                 config=moe_config,
@@ -99,35 +100,21 @@ class SageMakerNLPBaseModel(NLPModel):
                 amax_history_len=self._cfg.fp8_amax_history_len,
                 amax_compute_algo=self._cfg.fp8_amax_compute_algo,
             )
+
         self.setup_fsdp()
 
     def setup_fsdp(self):
         """
-        setup FSDP
+        setup smp enabled FSDP
         """
         transformer_layer = get_transformer_layer(self._cfg.model_type, self.use_smp, self._cfg.moe)
         auto_wrap_policy = get_auto_wrap_policy(self._cfg.auto_wrap_policy, transformer_layer)
         mixed_precision_policy = set_mixed_precision_recipe(precision=self._cfg.precision, use_smp=self.use_smp)
         sharding_strategy = get_sharding_strategy(self._cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(self._cfg.backward_fetch_policy)
-        delayed_param_initer = None
-        param_init_fn = None
-        post_param_init_fn = None
-        model_context = nullcontext()
 
         if self._cfg.delayed_param:
-            if self._cfg.finetune_with_pretrained_weights:
-                if self.global_rank != 0:
-                    delayed_param_initer = DelayedParamIniter(self.model)
-            else:
-                delayed_param_initer = DelayedParamIniter(self.model)
-
-        if delayed_param_initer:
-            param_init_fn = delayed_param_initer.get_param_init_fn()
-            post_param_init_fn = delayed_param_initer.get_post_param_init_fn()
-
-            if not self._cfg.finetune_with_pretrained_weights:
-                model_context = delayed_param_initer.validate_params_and_buffers_inited()
+            param_init_fn, post_param_init_fn, model_context = self.delayed_param_init_fn()
 
         with model_context:
             self.model = FSDP(
@@ -141,7 +128,6 @@ class SageMakerNLPBaseModel(NLPModel):
                 device_id=torch.cuda.current_device(),
                 use_orig_params=self._cfg.use_orig_param,
                 param_init_fn=param_init_fn,
-                post_param_init_fn=post_param_init_fn,
                 sync_module_states=self._cfg.finetune_with_pretrained_weights,
             )
         if self._cfg.activation_checkpointing:
@@ -164,14 +150,45 @@ class SageMakerNLPBaseModel(NLPModel):
             ):  # TODO: add a check to the model type and use enum for it
                 patch_neox_rope(model)
 
+    def delayed_param_init_fn(self):
+        """
+        Initializes model on torch meta devices
+        """
+        param_init_fn = None
+        post_param_init_fn = None
+        model_context = nullcontext()
+        delayed_param_initer = None
+        # If using SMP use sagemaker optimized DelayedParamIniter function
+        if self.use_smp:
+            from torch.sagemaker.delayed_param import DelayedParamIniter
+
+            # Depending on training job type, define DelayedParamIniter function across all ranks or subset of ranks
+            if self._cfg.finetune_with_pretrained_weights:
+                if self.global_rank != 0:
+                    delayed_param_initer = DelayedParamIniter(self.model)
+            else:
+                delayed_param_initer = DelayedParamIniter(self.model)
+
+            # If delayed_param_initer is defined in current rank return the pre and post init functions 
+            if delayed_param_initer:
+                param_init_fn = delayed_param_initer.get_param_init_fn()
+                post_param_init_fn = delayed_param_initer.get_post_param_init_fn()
+
+                if not self._cfg.finetune_with_pretrained_weights:
+                    model_context = delayed_param_initer.validate_params_and_buffers_inited()
+        else:
+            # Pulled param initialization function from open source meta/llama training recipes
+            # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
+            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+        return param_init_fn, post_param_init_fn, model_context
+
     def build_model(self, model_config):
         """
         Initialize model and configure flash attention
         """
-        if self._cfg.pretrained_model_name_or_path:
-            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_name_or_path)
-
-            if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
+        if self._cfg.pretrained_model_weights:
+            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_weights)
+            if tf_version < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self._cfg.pretrained_model_name_or_path, config=model_config
                 )
@@ -182,19 +199,16 @@ class SageMakerNLPBaseModel(NLPModel):
                     config=model_config,
                 )
         else:
-            if pversion.parse(transformers.__version__) < pversion.parse("4.37.1"):
+            if tf_version < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
                 self.model = AutoModelForCausalLM.from_config(model_config)
             else:
                 self.model = AutoModelForCausalLM.from_config(model_config, attn_implementation="flash_attention_2")
-
-        if self._cfg.use_smp_flash_attn:
-            self.configure_flash_attn()
 
     def configure_flash_attn(self):
         """
         Configure flash attention, should be implemented in specific model class
         """
-        raise NotImplementedError(f"configure_flash_attn is not implemented for {typr(self).__name__}")
+        raise NotImplementedError(f"configure_flash_attn is not implemented for {type(self).__name__}")
 
     def training_step(self, batch, batch_idx):
         """
@@ -205,6 +219,8 @@ class SageMakerNLPBaseModel(NLPModel):
 
         # uses default causal mask
         if self._cfg.fp8 and self.use_smp:
+            import torch.sagemaker as tsm
+
             with transformer_engine.pytorch.fp8_autocast(
                 enabled=self._cfg.fp8, fp8_recipe=self.fp8_recipe, fp8_group=tsm.state.world_process_group
             ):
@@ -254,11 +270,13 @@ class SageMakerNLPBaseModel(NLPModel):
         else:
             return [self._optimizer], [self._scheduler]
 
-    def configure_gradient_clipping(self, *args, **kwargs):
+    def _smp_configure_gradient_clipping(self, *args, **kwargs):
         """
         Cutomized gradient clipping for SMP
         TODO: figure out whether we should still use this for non-SMP usecase
         """
+        from torch.sagemaker.grad_norm import clip_grad_norm_
+
         self.grad_norm = clip_grad_norm_(self.model, self._cfg.grad_clip)
         return
 
@@ -310,11 +328,15 @@ class SageMakerNLPBaseModel(NLPModel):
             return self._trainer.max_steps
 
         if self._trainer.max_epochs is None or self._trainer.max_epochs < 0:
-            _logger.warning("Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set")
+            _logger.warning(
+                "Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set"
+            )
             return -1
 
         if getattr(self, "_train_dl", None) is None:
-            _logger.warning("Cannot compute `max_steps` from the number of epochs as the train dataloader is not set")
+            _logger.warning(
+                "Cannot compute `max_steps` from the number of epochs as the train dataloader is not set"
+            )
             return -1
 
         # The number of training step per epoch is typically the number of global batches in the training set...

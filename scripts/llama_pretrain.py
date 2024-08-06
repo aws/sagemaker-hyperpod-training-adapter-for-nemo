@@ -18,7 +18,7 @@ def train(cfg: DictConfig) -> None:
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
     exp_manager(trainer, cfg.exp_manager)
 
-    model_module = SageMakerLlamaModel(cfg.model, trainer)
+    model_module = SageMakerLlamaModel(cfg.model, trainer, use_smp=cfg.use_smp)
 
     trainer.fit(model_module, datamodule=data_module)
 

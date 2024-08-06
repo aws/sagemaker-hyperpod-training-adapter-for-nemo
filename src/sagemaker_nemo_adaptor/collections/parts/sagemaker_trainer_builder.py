@@ -17,15 +17,12 @@ from typing import Union
 
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
-from torch.sagemaker.logger import get_logger
 
 from sagemaker_nemo_adaptor.collections.data import DummyDataModule, GPTDataModule
 from sagemaker_nemo_adaptor.collections.parts import (
     SageMakerDDPStrategy,
     SageMakerFSDPStrategy,
 )
-
-logger = get_logger()
 
 
 class SageMakerTrainerBuilder:
@@ -41,7 +38,7 @@ class SageMakerTrainerBuilder:
         """
         Returns a DDP or a FSDP strategy passed to Trainer.strategy.
         """
-
+        smp_config_dict = None
         # check interactive environment TODO: Currently not supporting interactive mode
         _IS_INTERACTIVE = hasattr(sys, "ps1") or bool(sys.flags.interactive)
 
@@ -59,11 +56,11 @@ class SageMakerTrainerBuilder:
             smp_config_dict["expert_parallel_degree"] = self.cfg.model.expert_model_parallel_degree
             smp_config_dict["random_seed"] = self.cfg.model.seed
 
-        if self.cfg.use_smp or self.cfg.model.get("fsdp", False):
+        if self.cfg.use_smp or self.cfg.model.get("fsdp", True):
             # We're using FSDPStrategy for all SMP usecase for now
             return SageMakerFSDPStrategy(use_smp=self.cfg.use_smp, cfg=self.cfg, smp_config_dict=smp_config_dict)
         else:
-            return NLPDDPStrategy(cfg=self.cfg)
+            return SageMakerDDPStrategy(use_smp=self.cfg.use_smp, cfg=self.cfg, smp_config_dict=smp_config_dict)
 
     def create_trainer(self, callbacks=None) -> Trainer:
         strategy = self._training_strategy()

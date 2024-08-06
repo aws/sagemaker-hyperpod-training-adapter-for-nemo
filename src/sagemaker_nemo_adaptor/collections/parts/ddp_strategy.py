@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
 import torch
-import torch.sagemaker as tsm
 from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from omegaconf.dictconfig import DictConfig
 
@@ -70,15 +69,18 @@ class SageMakerDDPStrategy(NLPDDPStrategy):
         super(NLPDDPStrategy, self).setup_environment()
 
         # Initialize smp, todo: check whether we still need this for HF case
-        tsm.init(self.smp_config_dict)
+        if self.use_smp:
+            import torch.sagemaker as tsm
+
+            tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         initialize_model_parallel_for_nemo(
             world_size=self.world_size,
             global_rank=self.global_rank,
             local_rank=self.local_rank,
-            tensor_model_parallel_size=self.smp_config_dict["tensor_parallel_degree"],
-            seed=self.seed,
+            tensor_model_parallel_size=self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1,
+            seed=self.cfg.model.seed,
         )
 
     def lightning_module_state_dict(self) -> Dict[str, Any]:

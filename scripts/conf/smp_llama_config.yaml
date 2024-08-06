@@ -22,7 +22,7 @@ exp_manager:
     save_top_k: 10
 
 use_smp: True #enable Rubik
-distributed_backend: smddp
+distributed_backend: nccl
 
 
 
@@ -41,7 +41,6 @@ model:
   activation_loading_horizon: 2
   delayed_param: True
   offload_activations: False
-  use_smp_flash_attn: False
   seed: 12345
   grad_clip: 1.0
   hf_pretrained_model: null # User can use this to start from a hf pretrained model
@@ -70,6 +69,7 @@ model:
   vocab_size: 32000
   activation: 'gelu'
   num_key_value_heads: null
+  use_flash_attention: True
 
   # Transformer Engine
   transformer_engine: True
@@ -112,4 +112,4 @@ model:
     val_dir: null
     dataset_type: gpt
     use_synthetic_data: True
-    zipped_data: True #TODO: ideally we should have utils to check whether a data is zipped
+    zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped

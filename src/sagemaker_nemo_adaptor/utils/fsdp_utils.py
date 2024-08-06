@@ -9,10 +9,9 @@ from torch.distributed.fsdp.wrap import (
     size_based_auto_wrap_policy,
     transformer_auto_wrap_policy,
 )
-from torch.sagemaker.logger import get_logger
 
-_logger = get_logger()  # Todo: use more generic logger for kandinsky
-
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
+_logger = Logger().get_logger()
 
 def get_sharding_strategy(strategy: str):
     """Get sharding strategy."""
@@ -89,10 +88,11 @@ def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
         from smpv1.transformer import DistributedTransformerLayer
 
         transformer_layer = DistributedTransformerLayer
-    elif model_type == "llama_v2":
+    elif model_type == "llama_v2" or model_type == "llama_v3":
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
         transformer_layer = LlamaDecoderLayer
+
     elif model_type == "mistral":
         from transformers.models.mistral.modeling_mistral import MistralDecoderLayer
 
@@ -101,6 +101,9 @@ def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
         from transformers.models.mixtral.modeling_mixtral import MixtralDecoderLayer
 
         transformer_layer = MixtralDecoderLayer
+
+    if transformer_layer == None:
+        raise Exception(f"transformer_layer for model type {model_type} not defined.")
 
     return transformer_layer
 
