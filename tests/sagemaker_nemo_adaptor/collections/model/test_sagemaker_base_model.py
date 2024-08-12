@@ -2,7 +2,10 @@ import pytest
 from nemo.collections.nlp.models.nlp_model import NLPModel
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+from packaging import version as pversion
 from pytorch_lightning import Trainer
+
+import sagemaker_nemo_adaptor.collections.model.sagemaker_base_model as sbm
 
 # local modules
 from sagemaker_nemo_adaptor.collections.model.sagemaker_base_model import (
@@ -58,9 +61,8 @@ class TestBuildModel:
     )
     def test_w_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
         from_pretrained_stub = mocker.stub()
-        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
+        auto_model_mock, _ = self.get_test_mocks(mocker, version)
         auto_model_mock.from_pretrained = from_pretrained_stub
-        transformers_mock.__version__ = version
 
         # prepare
         full_config.model.pretrained_model_name_or_path = "test/path"
@@ -76,6 +78,26 @@ class TestBuildModel:
         assert len(kwargs) == exp_kwargs_len
         assert args[0] == full_config.model.pretrained_model_name_or_path
 
+    def test_w_pretrained_model_name_or_path_and_no_flash_attention(self, full_config, mocker):
+        from_pretrained_stub = mocker.stub()
+        auto_model_mock, _ = self.get_test_mocks(mocker, self.transformers_threshold_version)
+        auto_model_mock.from_pretrained = from_pretrained_stub
+
+        # prepare
+        full_config.model.pretrained_model_name_or_path = "test/path"
+        full_config.model.use_flash_attention = False
+        base = build_base_model(full_config.model)
+
+        # test
+        base.build_model(full_config.model)
+
+        # assertions
+        args, kwargs = from_pretrained_stub.call_args
+        from_pretrained_stub.assert_called_once()
+        assert len(args) == 1
+        assert len(kwargs) == 1
+        assert "attn_implementation" not in kwargs
+
     @pytest.mark.parametrize(
         ("version", "exp_args_len", "exp_kwargs_len"),
         [
@@ -85,10 +107,12 @@ class TestBuildModel:
     )
     def test_no_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
         from_config_stub = mocker.stub()
-        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
+        auto_model_mock, _ = self.get_test_mocks(mocker, version)
         auto_model_mock.from_config = from_config_stub
-        transformers_mock.__version__ = version
         test_model_config = {}
+
+        # prepare
+        full_config.model.pretrained_model_name_or_path = None
         base = build_base_model(full_config.model)
 
         # test
@@ -101,37 +125,32 @@ class TestBuildModel:
         assert len(kwargs) == exp_kwargs_len
         assert args[0] == test_model_config
 
-    def test_use_smp_flash_attn(self, full_config, mocker):
-        from_pretrained_stub = mocker.stub()
-        auto_model_mock, transformers_mock = self.get_test_mocks(mocker)
-        auto_model_mock.from_pretrained = from_pretrained_stub
-        transformers_mock.__version__ = transformers_threshold_version
-        test_model_config = {}
+    def test_no_pretrained_model_name_or_path_and_no_flash_attention(self, full_config, mocker):
+        from_config_stub = mocker.stub()
+        auto_model_mock, _ = self.get_test_mocks(mocker, self.transformers_threshold_version)
+        auto_model_mock.from_config = from_config_stub
+        test_model_args = {}
 
-        # prepare for False
-        full_config.model.use_smp_flash_attn = False
+        # prepare
+        full_config.model.pretrained_model_name_or_path = None
+        full_config.model.use_flash_attention = False
         base = build_base_model(full_config.model)
-        configure_flash_attn_mock = mocker.patch.object(base, "configure_flash_attn")
 
         # test
-        base.build_model(test_model_config)
-        configure_flash_attn_mock.assert_not_called()
+        base.build_model(test_model_args)
 
-        # prepare for True
-        full_config.model.use_smp_flash_attn = True
-        base = build_base_model(full_config.model)
-        configure_flash_attn_mock = mocker.patch.object(base, "configure_flash_attn")
+        # assertions
+        args, kwargs = from_config_stub.call_args
+        from_config_stub.assert_called_once()
+        assert len(args) == 1
+        assert args[0] == test_model_args
+        assert len(kwargs) == 0
 
-        # test
-        base.build_model(test_model_config)
-        configure_flash_attn_mock.assert_called_once()
-
-    def get_test_mocks(self, mocker):
+    def get_test_mocks(self, mocker, mocked_version: str):
         auto_model_mock = mocker.patch(MODULE_PATH + ".AutoModelForCausalLM")
-        transformers_mock = mocker.patch(
-            MODULE_PATH + ".transformers",
-        )
-        return auto_model_mock, transformers_mock
+        parsed_version = pversion.parse(mocked_version)
+        TF_VERSION_mock = mocker.patch.object(sbm, "TF_VERSION", new=parsed_version)
+        return auto_model_mock, TF_VERSION_mock
 
 
 class TestTrainingStep:

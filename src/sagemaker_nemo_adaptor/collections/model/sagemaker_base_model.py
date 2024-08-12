@@ -22,14 +22,15 @@ from sagemaker_nemo_adaptor.utils.fsdp_utils import (
     get_transformer_layer,
     set_mixed_precision_recipe,
 )
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
 from sagemaker_nemo_adaptor.utils.train_utils import (
     compute_num_params,  # TODO: Find a more integrated way to compute num params, probably using lightning ModelSummary: https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.ModelSummary.html#lightning.pytorch.callbacks.ModelSummary
 )
 from sagemaker_nemo_adaptor.utils.train_utils import apply_activation_checkpoint
-from sagemaker_nemo_adaptor.utils.log_utils import Logger
-_logger = Logger().get_logger()
 
-tf_version = pversion.parse(transformers.__version__)
+TF_VERSION = pversion.parse(transformers.__version__)
+
+_logger = Logger().get_logger()
 
 
 class SageMakerNLPBaseModel(NLPModel):
@@ -169,7 +170,7 @@ class SageMakerNLPBaseModel(NLPModel):
             else:
                 delayed_param_initer = DelayedParamIniter(self.model)
 
-            # If delayed_param_initer is defined in current rank return the pre and post init functions 
+            # If delayed_param_initer is defined in current rank return the pre and post init functions
             if delayed_param_initer:
                 param_init_fn = delayed_param_initer.get_param_init_fn()
                 post_param_init_fn = delayed_param_initer.get_post_param_init_fn()
@@ -186,9 +187,10 @@ class SageMakerNLPBaseModel(NLPModel):
         """
         Initialize model and configure flash attention
         """
-        if self._cfg.pretrained_model_weights:
-            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_weights)
-            if tf_version < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
+        if self._cfg.pretrained_model_name_or_path:
+            _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_name_or_path)
+
+            if TF_VERSION < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self._cfg.pretrained_model_name_or_path, config=model_config
                 )
@@ -199,7 +201,7 @@ class SageMakerNLPBaseModel(NLPModel):
                     config=model_config,
                 )
         else:
-            if tf_version < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
+            if TF_VERSION < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
                 self.model = AutoModelForCausalLM.from_config(model_config)
             else:
                 self.model = AutoModelForCausalLM.from_config(model_config, attn_implementation="flash_attention_2")
@@ -328,15 +330,11 @@ class SageMakerNLPBaseModel(NLPModel):
             return self._trainer.max_steps
 
         if self._trainer.max_epochs is None or self._trainer.max_epochs < 0:
-            _logger.warning(
-                "Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set"
-            )
+            _logger.warning("Cannot compute `max_steps` if neither `trainer.max_steps` nor `trainer.max_epochs` is set")
             return -1
 
         if getattr(self, "_train_dl", None) is None:
-            _logger.warning(
-                "Cannot compute `max_steps` from the number of epochs as the train dataloader is not set"
-            )
+            _logger.warning("Cannot compute `max_steps` from the number of epochs as the train dataloader is not set")
             return -1
 
         # The number of training step per epoch is typically the number of global batches in the training set...
