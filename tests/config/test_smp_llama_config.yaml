@@ -64,7 +64,7 @@ max_position_embeddings: ${.max_context_width}
 num_layers: 32
 hidden_width: 4096
 num_heads: 32
-llama_intermediate_size: 14336
+intermediate_size: 14336
 initializer_range: 0.02
 pad_token_id: 0
 layernorm_epsilon: 1e-5

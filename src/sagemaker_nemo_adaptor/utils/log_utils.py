@@ -1,9 +1,12 @@
 import logging as logger
+
 try:
     from torch.sagemaker.logger import get_logger
+
     use_smp = True
 except:
     use_smp = False
+
 
 class Logger:
     """
@@ -22,7 +25,7 @@ class Logger:
             sh = logger.StreamHandler()
             sh.setLevel(logger.DEBUG)
 
-            formatter = logger.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            formatter = logger.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             sh.setFormatter(formatter)
 
             _logger.addHandler(sh)

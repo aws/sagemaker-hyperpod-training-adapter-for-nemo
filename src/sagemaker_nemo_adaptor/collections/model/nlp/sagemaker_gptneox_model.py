@@ -3,7 +3,7 @@ from transformers import GPTNeoXConfig
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
 
 
-class SageMakerLlamaModel(SageMakerNLPBaseModel):
+class SageMakerGPTNeoXModel(SageMakerNLPBaseModel):
     """
     Lightning Model class for Llama
     """

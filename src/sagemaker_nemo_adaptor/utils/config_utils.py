@@ -1,8 +1,9 @@
 from functools import wraps
-from typing import TypeVar, Any, Callable, cast
-from omegaconf import DictConfig, OmegaConf
+from typing import Any, Callable, TypeVar, cast
+
 from hydra import compose, initialize
 from hydra.core.global_hydra import GlobalHydra
+from omegaconf import DictConfig, OmegaConf
 
 _T = TypeVar("_T", bound=Callable[..., Any])
 

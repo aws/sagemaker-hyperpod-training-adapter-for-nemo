@@ -11,7 +11,9 @@ from torch.distributed.fsdp.wrap import (
 )
 
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
 _logger = Logger().get_logger()
+
 
 def get_sharding_strategy(strategy: str):
     """Get sharding strategy."""

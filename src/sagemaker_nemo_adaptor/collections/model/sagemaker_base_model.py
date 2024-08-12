@@ -191,6 +191,7 @@ class SageMakerNLPBaseModel(NLPModel):
             _logger.info("Loading pretrained weights from %s.", self._cfg.pretrained_model_name_or_path)
 
             if TF_VERSION < pversion.parse("4.37.1") or not self._cfg.use_flash_attention:
+
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self._cfg.pretrained_model_name_or_path, config=model_config
                 )

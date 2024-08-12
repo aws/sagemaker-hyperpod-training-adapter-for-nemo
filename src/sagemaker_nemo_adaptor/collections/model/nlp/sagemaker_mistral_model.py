@@ -1,19 +1,19 @@
-from transformers import LlamaConfig
+from transformers import MistralConfig
 
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
 
 
-class SageMakerLlamaModel(SageMakerNLPBaseModel):
+class SageMakerMistralModel(SageMakerNLPBaseModel):
     """
-    Lightning Model class for Llama
+    Lightning Model class for Mistral
     """
 
     def get_model_config(self):
         """
-        Get model config for Llama
+        Get model config for Mistral
         TODO: Implement Autoconfig in parent class, so Cx can init with only given a HF model name
         """
-        model_config = LlamaConfig(
+        model_config = MistralConfig(
             vocab_size=self._cfg.vocab_size,
             hidden_size=self._cfg.hidden_width,
             intermediate_size=self._cfg.intermediate_size,
@@ -23,10 +23,14 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
             hidden_act="silu",
             max_position_embeddings=self._cfg.max_context_width,
             initializer_range=self._cfg.initializer_range,
-            rms_norm_eps=1e-5,
+            rms_norm_eps=1e-6,
             use_cache=False,
-            pretraining_tp=1,
+            pad_token_id=None,
+            bos_token_id=1,
+            eos_token_id=2,
             tie_word_embeddings=False,
-            rope_scaling=None,
+            rope_theta=10000.0,
+            sliding_window=self._cfg.mistral_sliding_window,
+            attention_dropout=0.0,
         )
         return model_config

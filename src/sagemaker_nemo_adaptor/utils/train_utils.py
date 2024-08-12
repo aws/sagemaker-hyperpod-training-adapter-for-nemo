@@ -10,11 +10,13 @@ from torch.nn import LayerNorm
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from sagemaker_nemo_adaptor.utils.fsdp_utils import get_transformer_layer
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 # pylint: disable=import-error,import-outside-toplevel,invalid-name,no-member,no-name-in-module,protected-access
 
-from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
 _logger = Logger().get_logger()
+
 
 def compute_num_params(model):
     """Get num params."""
