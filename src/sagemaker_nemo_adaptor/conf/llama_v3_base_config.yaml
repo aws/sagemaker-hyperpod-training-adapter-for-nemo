@@ -1,0 +1,115 @@
+name:
+    - must_have_name # Go with SFA
+restore_from_path: null
+trainer:
+  devices: 8
+  num_nodes: 2
+  accelerator: gpu
+  precision: bf16
+  max_steps: 50
+  log_every_n_steps: 10
+
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+
+
+exp_manager:
+  exp_dir: /fsx/users/chehaoha1/exp/
+  name: my_experiment
+  create_tensorboard_logger: True
+  create_checkpoint_callback: True
+  checkpoint_callback_params:
+    save_top_k: 10
+
+use_smp: True #enable Rubik
+distributed_backend: smddp
+
+
+# Start training from pretrained model
+model:
+  model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
+
+  train_batch_size: 4
+  tensor_model_parallel_degree: 1
+  expert_model_parallel_degree: 1
+  moe: False
+  sequence_parallel: True
+  activation_checkpointing: True
+  activation_loading_horizon: 2
+  delayed_param: True
+  offload_activations: False
+  use_smp_flash_attn: False
+  seed: 12345
+  grad_clip: 1.0
+  hf_pretrained_model: null # User can use this to start from a hf pretrained model
+
+
+  # FSDP Configs
+  sharding_strategy: hybrid_shard
+  forward_prefetch: True
+  shard_degree: 32
+  backward_fetch_policy: backward_pre
+  auto_wrap_policy: transformer_auto_wrap_policy
+  limit_all_gathers: False
+  use_orig_param: False
+
+  # model architecture
+  max_context_width: 4096
+  max_position_embeddings: ${.max_context_width}
+  num_layers: 32
+  hidden_width: 4096
+  num_heads: 32
+  llama_intermediate_size: 14336
+  initializer_range: 0.02
+  pad_token_id: 0
+  layernorm_epsilon: 1e-5
+  attention_bias: False
+  vocab_size: 32000
+  activation: 'gelu'
+  num_key_value_heads: null
+
+  # Transformer Engine
+  transformer_engine: True
+  fp8: False
+  fp8_amax_history_len: 1024
+  fp8_amax_compute_algo: max
+
+  # finetune
+  do_finetune: False
+  finetune_with_pretrained_weights: False
+
+  # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
+  pretrained_model_name_or_path: null
+
+  precision: ${trainer.precision}
+
+  lr_decay_iters: 47683
+
+  log_reduced_training_loss: True
+
+  # Optimizer
+  optim:
+    name: adamw
+    lr: 2e-4
+    weight_decay: 0.01
+    betas:
+    - 0.9
+    - 0.98
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 500
+      constant_steps: 0
+      min_lr: 2e-5
+
+
+
+  # Data
+  data:
+    train_dir: <path>/<to>/<data>
+    val_dir: null
+    dataset_type: gpt
+    use_synthetic_data: True
+    zipped_data: True #TODO: ideally we should have utils to check whether a data is zipped
+
+internal:
+  config_verified: False

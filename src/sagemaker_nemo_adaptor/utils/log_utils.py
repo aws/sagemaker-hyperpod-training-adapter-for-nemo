@@ -1,11 +1,9 @@
 import logging as logger
+from typing import cast
 
-try:
-    from torch.sagemaker.logger import get_logger
+import torch.sagemaker as tmp
 
-    use_smp = True
-except:
-    use_smp = False
+use_smp = hasattr(tmp, "get_logger")
 
 
 class Logger:
@@ -16,8 +14,9 @@ class Logger:
 
     def __init__(self):
         self.logger = None
+
         if use_smp:
-            self.logger = get_logger()
+            self.logger = tmp.get_logger()
         else:
             _logger = logger.getLogger("smp")
             _logger.setLevel(logger.DEBUG)
@@ -31,5 +30,5 @@ class Logger:
             _logger.addHandler(sh)
             self.logger = _logger
 
-    def get_logger(self):
-        return self.logger
+    def get_logger(self) -> logger.Logger:
+        return cast(logger.Logger, self.logger)

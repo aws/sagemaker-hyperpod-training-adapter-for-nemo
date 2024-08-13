@@ -1,12 +1,12 @@
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Union
+
 import torch
 import torch.sagemaker as tsm
-
 from nemo.collections.nlp.parts import utils_funcs
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from omegaconf.dictconfig import DictConfig
-from pathlib import Path
 from torch.distributed.fsdp import MixedPrecision
-from typing import Any, Dict, Mapping, Optional, Union
 
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
 from sagemaker_nemo_adaptor.utils.fsdp_utils import (
