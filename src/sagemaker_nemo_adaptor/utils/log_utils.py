@@ -1,10 +1,12 @@
 import logging as logger
 from typing import cast
 
-import torch.sagemaker as tmp
+try:
+    from torch.sagemaker.logger import get_logger
 
-use_smp = hasattr(tmp, "get_logger")
-
+    use_smp = True
+except:
+    use_smp = False
 
 class Logger:
     """
@@ -16,7 +18,7 @@ class Logger:
         self.logger = None
 
         if use_smp:
-            self.logger = tmp.get_logger()
+            self.logger = get_logger()
         else:
             _logger = logger.getLogger("smp")
             _logger.setLevel(logger.DEBUG)
