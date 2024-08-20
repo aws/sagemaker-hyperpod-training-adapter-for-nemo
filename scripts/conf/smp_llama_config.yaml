@@ -55,7 +55,7 @@ model:
 
   # model architecture
   max_context_width: 4096
-  max_position_embeddings: null
+  max_position_embeddings: ${.max_context_width}
   num_layers: 32
   hidden_width: 4096
   num_heads: 32

@@ -8,6 +8,7 @@ try:
 except:
     use_smp = False
 
+
 class Logger:
     """
     Simple wrapper class for logging with and without SMP enabled environments.

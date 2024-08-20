@@ -8,7 +8,9 @@ import torch
 import torch.distributed as dist
 
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
 _logger = Logger().get_logger()
+
 
 class GPTPretrainingDataset(torch.utils.data.Dataset):
     """GPT Pretraining Dataset."""
