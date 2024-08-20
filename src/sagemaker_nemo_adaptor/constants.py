@@ -1,9 +1,17 @@
 from enum import Enum, unique
 
+GPUS_PER_NODE = 8
+
 
 @unique
 class ModelType(Enum):
+    BERT = "bert"
+    GPT_NEOX = "gpt_neox"
+    GPT2 = "gpt2"
+    LLAMA_V2 = "llama_v2"
     LLAMA_V3 = "llama_v3"
+    MISTRAL = "mistral"
+    MIXTRAL = "mixtral"
 
 
 class SageMakerParallelParams(Enum):

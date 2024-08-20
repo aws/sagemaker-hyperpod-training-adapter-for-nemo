@@ -1,6 +1,7 @@
 name:
     - hf_llama_8b # Go with SFA
 restore_from_path: null
+
 trainer:
   devices: 8
   num_nodes: 1
@@ -23,9 +24,6 @@ exp_manager:
 
 use_smp: True #enable Rubik
 distributed_backend: nccl
-
-
-
 
 
 # Start training from pretrained model
@@ -57,7 +55,7 @@ model:
 
   # model architecture
   max_context_width: 4096
-  max_position_embeddings: ${.max_context_width}
+  max_position_embeddings: null
   num_layers: 32
   hidden_width: 4096
   num_heads: 32
@@ -103,8 +101,6 @@ model:
       warmup_steps: 500
       constant_steps: 0
       min_lr: 2e-5
-
-
 
   # Data
   data:
