@@ -32,7 +32,7 @@ setup(
     include_package_data=True,
     packages=PEP420PackageFinder.find(where="src"),
     package_dir={"": "src"},
-    package_data={"sagemaker_nemo_adaptor/conf": ["*.yaml"]},
+    package_data={"sagemaker_nemo_adaptor": ["conf/*.yaml"]},
     install_requires=parse_requirements("requirements.txt"),
     extras_require=extra_requirements(),
     python_requires=">= 3.10",

@@ -29,7 +29,6 @@ distributed_backend: nccl
 # Start training from pretrained model
 model:
   model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
-
   train_batch_size: 4
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1
@@ -104,8 +103,11 @@ model:
 
   # Data
   data:
-    train_dir: ["/fsx/datasets/train_ids_wsvocab_redo_2048_smaller"]
-    val_dir: ["/fsx/datasets/llama_new/val"]
+    train_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/train"]
+    val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
     dataset_type: gpt
-    use_synthetic_data: False
+    use_synthetic_data: True
     zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped
+
+internal:
+  config_verified: false

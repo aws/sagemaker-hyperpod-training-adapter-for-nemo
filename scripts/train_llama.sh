@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+set -euxo pipefail
+
+nsys_path=""
+
 parse_inputs() {
     while [[ $# -gt 0 ]]; do
         key="$1"
@@ -12,6 +16,10 @@ parse_inputs() {
             MASTER_ADDR=$2
             shift 2
             ;;
+        --nsys_path)
+            nsys_path=$2
+            shift 2
+            ;;
         *)
             shift 1
             ;;
@@ -21,16 +29,6 @@ parse_inputs() {
 
 parse_inputs $@
 
-echo "HF is $hostfile"
-# if [ -z "$hostfile" ]; then
-#     echo "Hostfile needs to be passed"
-#     exit 1
-# fi
-
-# NNODES=$(cat $hostfile | wc -l)
-
-
-
 export NCCL_PROTO="simple"
 export NCCL_SOCKET_IFNAME="^lo,docker"
 export RDMAV_FORK_SAFE=1
@@ -38,12 +36,7 @@ export FI_EFA_USE_DEVICE_RDMA=1
 export NCCL_DEBUG_SUBSYS=off
 export NCCL_DEBUG="INFO"
 export SM_NUM_GPUS=8
-# export MASTER_ADDR=$(head -n 1 $hostfile)
 export GPU_NUM_DEVICES=8
-
-
-
-echo nnode
 
 TORCH_CMD="torchrun --nnodes=${NNODES} --nproc_per_node=8"
 
@@ -58,8 +51,6 @@ else
     profile_nsys=0
 fi
 
-export PYTHONPATH="${PYTHONPATH}:/fsx/users/chehaoha1/kandinsky/adapter/SageMakerNeMoAdaptor/src" # TODO: remove when package installation ready
-echo "cmd $TORCH_CMD"
 $TORCH_CMD \
     --rdzv_endpoint=$MASTER_ADDR:29400 --rdzv_id=100 --rdzv_backend=c10d \
     llama_pretrain.py
