@@ -114,8 +114,7 @@ class SageMakerNLPBaseModel(NLPModel):
         sharding_strategy = get_sharding_strategy(self._cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(self._cfg.backward_fetch_policy)
 
-        if self._cfg.delayed_param:
-            param_init_fn, post_param_init_fn, model_context = self.delayed_param_init_fn()
+        param_init_fn, post_param_init_fn, model_context = self.delayed_param_init_fn(self._cfg.delayed_param)
 
         with model_context:
             self.model = FSDP(
@@ -151,7 +150,7 @@ class SageMakerNLPBaseModel(NLPModel):
             ):  # TODO: add a check to the model type and use enum for it
                 patch_neox_rope(model)
 
-    def delayed_param_init_fn(self):
+    def delayed_param_init_fn(self, enable):
         """
         Initializes model on torch meta devices
         """
@@ -160,6 +159,9 @@ class SageMakerNLPBaseModel(NLPModel):
         model_context = nullcontext()
         delayed_param_initer = None
         # If using SMP use sagemaker optimized DelayedParamIniter function
+        if not enable:
+            return param_init_fn, post_param_init_fn, model_context
+
         if self.use_smp:
             from torch.sagemaker.delayed_param import DelayedParamIniter
 
@@ -178,9 +180,15 @@ class SageMakerNLPBaseModel(NLPModel):
                 if not self._cfg.finetune_with_pretrained_weights:
                     model_context = delayed_param_initer.validate_params_and_buffers_inited()
         else:
-            # Pulled param initialization function from open source meta/llama training recipes
-            # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
-            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+            if self._cfg.finetune_with_pretrained_weights:
+                # Pulled param initialization function from open source meta/llama training recipes
+                # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
+                param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+            else:
+                param_init_fn = lambda module: module.to_empty(
+                    device=torch.device("cuda"), recurse=False
+                )  # TODO (rnadimp) add a proper param init funct for non-smp case
+
         return param_init_fn, post_param_init_fn, model_context
 
     def build_model(self, model_config):

@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 import torch
 import torch.distributed as dist
 from nemo.utils import AppState
@@ -15,10 +17,11 @@ class BaseDataModule(LightningDataModule):
     3. (TODO: WIP) Compute the processed batches for checkpointing and throughput calculation.
     """
 
-    def __init__(self, cfg: DictConfig, trainer: Trainer):
+    def __init__(self, cfg: DictConfig, trainer: Trainer, collate_fn: Optional[Callable] = None):
         super().__init__()
         self.cfg = cfg
         self.trainer = trainer
+        self.collate_fn = collate_fn
 
     def setup(self, stage=None):
         super().setup(stage)
@@ -39,7 +42,6 @@ class BaseDataModule(LightningDataModule):
         resume_from_sequence_number=0,
         num_workers=0,
         shuffle=False,
-        collate_fn=None,
     ):
         """
         Build sampler and dataloader
@@ -61,7 +63,7 @@ class BaseDataModule(LightningDataModule):
             "sampler": sampler,
             "batch_size": self.cfg.model.train_batch_size,
             "num_workers": num_workers,
-            "collate_fn": collate_fn,
+            "collate_fn": self.collate_fn,
             "pin_memory": True,
             "drop_last": True,
         }

@@ -14,6 +14,12 @@ class ModelType(Enum):
     MIXTRAL = "mixtral"
 
 
+class DataTypes(Enum):
+    ARROW = ".arrow"
+    JSON = ".json"
+    JSONGZ = ".json.gz"
+
+
 class SageMakerParallelParams(Enum):
     TENSOR_MODEL_PARALLEL_DEGREE = "tensor_model_parallel_degree"
     EXPERT_MODEL_PARALLEL_DEGREE = "expert_model_parallel_degree"

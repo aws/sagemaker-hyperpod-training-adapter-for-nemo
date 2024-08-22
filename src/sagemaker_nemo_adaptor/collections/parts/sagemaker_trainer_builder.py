@@ -18,7 +18,11 @@ from typing import Union
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 
-from sagemaker_nemo_adaptor.collections.data import DummyDataModule, GPTDataModule
+from sagemaker_nemo_adaptor.collections.data import (
+    DummyDataModule,
+    HuggingFaceDataModule,
+    MegatronDataModule,
+)
 from sagemaker_nemo_adaptor.collections.parts import (
     SageMakerDDPStrategy,
     SageMakerFSDPStrategy,
@@ -72,10 +76,13 @@ class SageMakerTrainerBuilder:
             logger=False,  # Logger will be configured in exp_manager, set to false here to prevent conflict
         )  # TODO: could be configurable with cfg.trainer
 
-        data_module = (
-            DummyDataModule(self.cfg, trainer)
-            if self.cfg.model.data.use_synthetic_data
-            else GPTDataModule(self.cfg, trainer)
-        )
+        data_module = None
+        if self.cfg.model.data.use_synthetic_data:
+            data_module = DummyDataModule(self.cfg, trainer)
+        else:
+            if self.cfg.model.data.dataset_type == "hf":
+                data_module = HuggingFaceDataModule(self.cfg, trainer)
+            else:
+                data_module = MegatronDataModule(self.cfg, trainer)
 
         return trainer, data_module
