@@ -14,7 +14,7 @@ class ModelType(Enum):
     MIXTRAL = "mixtral"
 
 
-class DataTypes(Enum):
+class DataTypes:
     ARROW = ".arrow"
     JSON = ".json"
     JSONGZ = ".json.gz"

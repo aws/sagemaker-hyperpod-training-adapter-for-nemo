@@ -7,7 +7,9 @@ import torch
 from datasets import load_dataset, load_from_disk
 
 from sagemaker_nemo_adaptor.constants import DataTypes
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
+_logger = Logger().get_logger()
 
 class HuggingFacePretrainingDataset():
     def __init__(self, input_path: str, partition: str = "train"):
@@ -37,7 +39,7 @@ class HuggingFacePretrainingDataset():
             return DataTypes.JSON
 
         else:
-            raise ValueError(f"Unsupported file format or no recognizable files found in the directory. Expecting all files to be of type .arrow, .json.gz or .json.")
+            raise NotImplementedError(f"Unsupported file format in dataset directory. Expecting files of type '.arrow' '.json.gz' or '.json' but instead found {','.join(suffixes_list)}.")
 
     @property
     def dataset(self):
