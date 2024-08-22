@@ -19,8 +19,8 @@ while IFS= read -r -d '' d; do
   device+=("--device=${d}")
 done < <(find "/dev/infiniband" -name "uverbs*" -print0)
 
-FSX_MOUNT="-v /fsx/:/fsx"
-NFS_MOUNT="-v /nfs/:/nfs"
+FSX_MOUNT="/fsx/:/fsx"
+NFS_MOUNT="/nfs/:/nfs"
 
 docker ps -q -a | xargs -I{} docker stop {}
 docker ps -q -a | xargs -I{} docker rm -f {}
