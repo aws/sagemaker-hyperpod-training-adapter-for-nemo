@@ -71,7 +71,7 @@ def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config)
 
 def _validate_schema(cfg: DictConfig) -> tuple[DictConfig, type[BaseModel]]:
     SchemaValidator = _get_model_validator(cfg)
-    config_dict = OmegaConf.to_container(cfg)
+    config_dict = OmegaConf.to_container(cfg, resolve=True)
 
     try:
         validated_model = SchemaValidator.model_validate(config_dict)

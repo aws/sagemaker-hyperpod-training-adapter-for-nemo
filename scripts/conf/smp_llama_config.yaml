@@ -105,7 +105,7 @@ model:
   data:
     train_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/train"]
     val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
-    dataset_type: gpt
+    dataset_type: hf
     use_synthetic_data: True
     zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped
 
