@@ -1,7 +1,6 @@
-import json
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 import torch
 from datasets import load_dataset, load_from_disk
@@ -11,7 +10,8 @@ from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
 
-class HuggingFacePretrainingDataset():
+
+class HuggingFacePretrainingDataset:
     def __init__(self, input_path: str, partition: str = "train"):
         self.input_path = input_path
         self.partition = partition
@@ -21,9 +21,17 @@ class HuggingFacePretrainingDataset():
             case DataTypes.ARROW:
                 self._dataset = load_from_disk(self.input_path)
             case DataTypes.JSONGZ:
-                self._dataset = load_dataset(self.input_path, data_files=[os.path.join(self.input_path, f'*{DataTypes.JSONGZ}')], split=self.partition)
+                self._dataset = load_dataset(
+                    self.input_path,
+                    data_files=[os.path.join(self.input_path, f"*{DataTypes.JSONGZ}")],
+                    split=self.partition,
+                )
             case DataTypes.JSON:
-                self._dataset = load_dataset(self.input_path, data_files=[os.path.join(self.input_path, f'*{DataTypes.JSON}')], split=self.partition)
+                self._dataset = load_dataset(
+                    self.input_path,
+                    data_files=[os.path.join(self.input_path, f"*{DataTypes.JSON}")],
+                    split=self.partition,
+                )
 
     def _get_data_format(self, path):
         files = list(Path(path).iterdir())
@@ -39,7 +47,9 @@ class HuggingFacePretrainingDataset():
             return DataTypes.JSON
 
         else:
-            raise NotImplementedError(f"Unsupported file format in dataset directory. Expecting files of type '.arrow' '.json.gz' or '.json' but instead found {','.join(suffixes_list)}.")
+            raise NotImplementedError(
+                f"Unsupported file format in dataset directory. Expecting files of type '.arrow' '.json.gz' or '.json' but instead found {','.join(suffixes_list)}."
+            )
 
     @property
     def dataset(self):

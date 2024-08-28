@@ -6,8 +6,15 @@ import torch.sagemaker as tsm
 from nemo.collections.nlp.parts import utils_funcs
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from omegaconf.dictconfig import DictConfig
-from torch.distributed.fsdp import MixedPrecision
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import MixedPrecision, StateDictType
+from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
+    SMStateDictType,
+    sm_state_dict_type,
+)
 
+from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
+from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import SageMakerCheckpointIO
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
 from sagemaker_nemo_adaptor.utils.fsdp_utils import (
     get_auto_wrap_policy,
@@ -76,25 +83,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 buffer_dtype=buffer_dtype,
             )
 
-        # # Set the mixed precision recipe TODO: Uncomment this once we moved FSDP setup back to strategy
-        # kwargs["mixed_precision"] = self._set_mixed_precision_recipe(
-        #     precision, grad_reduce_dtype, set_buffer_dtype=set_buffer_dtype
-        # )
-
-        # # Set FSDP configurations
-        # kwargs["backward_prefetch"] = get_backward_fetch_policy(backward_fetch_policy)
-        # transformer_layer = get_transformer_layer(model_type, use_smp, moe)
-        # kwargs["auto_wrap_policy"] = get_auto_wrap_policy(auto_wrap_policy, transformer_layer)
-        # kwargs["sharding_strategy"] = get_sharding_strategy(sharding_strategy)
-        # kwargs["forward_prefetch"] = forward_prefetch
-        # # use_orig_params needs to be True for SMP transformer engine usecase
-        # kwargs["use_orig_params"] = True if use_smp else use_orig_params
-        # Set FSDP state dict configs
-        # self.sharded_checkpoint = sharded_checkpoint
-        # self.state_dict_context = (
-        #     _get_sharded_state_dict_context if sharded_checkpoint else _get_full_state_dict_context
-        # ) TODO: implement when doing checkpoint
-
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
 
@@ -137,73 +125,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             buffer_dtype=buffer_dtype,
         )
 
-    def _setup_model(self, model: torch.nn.Module) -> torch.nn.Module:
-        """Wraps the model into a :class:`~torch.distributed.fsdp.fully_sharded_data_parallel.FullyShardedDataParallel`
-        module.
-        Over write original PT-Lightning _setup_model function to add deferred_initialization related patches.
-        """
-
-        # TODO: implement FSDP wrapping within strategy, need to check why PTL wrapped model in different way
-        # TODO: check why
-        # # Config delayed param init
-        # if self.delayed_param:
-        #     if self.finetune_with_pretrained_weights:
-        #         if self.global_rank != 0:
-        #             delayed_param_initer = DelayedParamIniter(model._forward_module.model)
-        #     else:
-        #         delayed_param_initer = DelayedParamIniter(model._forward_module.model)
-        # if delayed_param_initer:
-        #     param_init_fn = delayed_param_initer.get_param_init_fn()
-        #     post_param_init_fn = delayed_param_initer.get_post_param_init_fn()
-        # else:
-        #     param_init_fn = None
-        #     post_param_init_fn = None
-
-        # from torch.distributed.fsdp import FullyShardedDataParallel
-
-        # assert self.lightning_module is not None
-        # if "auto_wrap_policy" in self.kwargs and any(
-        #     isinstance(mod, FullyShardedDataParallel) for mod in self.lightning_module.modules()
-        # ):
-        #     del self.kwargs["auto_wrap_policy"]
-
-        # # TODO: use a new logger
-        # # log.debug(f"setting up FSDP model with device id: {self.root_device.index}, kwargs: {self.kwargs}")
-        # with (
-        #     delayed_param_initer.validate_params_and_buffers_inited()
-        #     if (delayed_param_initer and not self.finetune_with_pretrained_weights)
-        #     else nullcontext()
-        # ):
-        #     model = FullyShardedDataParallel(
-        #         module=model,
-        #         cpu_offload=self.cpu_offload,
-        #         mixed_precision=self.mixed_precision_config,
-        #         device_id=self.root_device.index,
-        #         param_init_fn=param_init_fn,
-        #         post_param_init_fn=post_param_init_fn,
-        #         sync_module_states=self.finetune_with_pretrained_weights, # Todo: check this when implementing fine-tuning
-        #         **self.kwargs,
-        #     )
-
-        # # activation checkpointing needs to be set up after wrapping the model
-        # if _TORCH_GREATER_EQUAL_1_13 and self.activation_checkpointing:
-        #     # _setup_activation_checkpointing(model, self._activation_checkpointing_kwargs)
-        #     # Apply SMP specific activation checkpointing
-        #     apply_activation_checkpoint(
-        #         model=model,
-        #         model_type=self.model_type,
-        #         use_smp=self.use_smp,
-        #         fp8=self.fp8,
-        #         moe=self.moe,
-        #     )
-
-        # if self.offload_activations:
-        #     from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
-        #     model = offload_wrapper(model)
-        #     if self.use_smp and self.model_type == "gpt_neox" and self.patch_neox_rope > 0:
-        #         patch_neox_rope(model)
-        return model
-
     def setup(self, trainer: "pl.Trainer") -> None:
         super(NLPFSDPStrategy, self).setup(trainer)
 
@@ -227,19 +148,50 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             seed=self.cfg.model.seed,
         )
 
+    @property
+    def sharded_model_state_dict(self):
+        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
+            return self.model.state_dict()
+
+    @property
+    def local_model_state_dict(self):
+        with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
+            return self.model.state_dict()
+
     def lightning_module_state_dict(self) -> Dict[str, Any]:
         """
         Store the model state dict in one of full or sharded format.
         """
-        # TODO: add when implementing checkpoint
-        return
+        assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
+        typ = self.checkpoint_io.checkpoint_type
+        if typ == SageMakerCheckpointType.LOCAL:
+            return self.local_model_state_dict
+        if typ == SageMakerCheckpointType.SHARDED:
+            return self.sharded_model_state_dict
+        raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
+
+    def sharded_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
+        # TODO: Turn off optimizer offload_to_cpu? i.e., offload_to_cpu=False.
+        #       We are unable to set offload_to_cpu=False now bc many features
+        #       are still not applied.
+        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
+            return FSDP.optim_state_dict(self.model, optimizer)
+
+    def local_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
+        with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
+            return optimizer.state_dict()
 
     def optimizer_state(self, optimizer: torch.optim.Optimizer) -> Dict[str, torch.Tensor]:
         """
         Store the full optimizer state dict in one of full or sharded format.
         """
-        # TODO: add when implementing checkpoint
-        return
+        assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
+        typ = self.checkpoint_io.checkpoint_type
+        if typ == SageMakerCheckpointType.LOCAL:
+            return self.local_optimizer_state_dict(optimizer)
+        if typ == SageMakerCheckpointType.SHARDED:
+            return self.sharded_optimizer_state_dict(optimizer)
+        raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def load_model_state_dict(self, checkpoint: Mapping[str, Any], strict=None) -> None:
         # Release strict state dict matching when using Megatron AMP-O2 to skip matching
@@ -256,14 +208,16 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return
 
     def save_checkpoint(
-        self, checkpoint: Dict[str, Any], filepath: Union[str, Path], storage_options: Optional[Any] = None
+        self,
+        checkpoint: Dict[str, Any],
+        filepath: Union[str, Path],
+        storage_options: Optional[Any] = None,
     ) -> None:
         """Store checkpoints
         1. In case of sharded checkpoint, all ranks store unique checkpoints.
         2. In case of non-sharded checkpoint, all data-parallel rank 0 store checkpoints.
         """
-        # TODO: add when implementing checkpoint
-        return
+        self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options)
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path]) -> Dict[str, Any]:
         """Load checkpoints"""

@@ -1,4 +1,4 @@
-from enum import Enum, unique
+from enum import Enum, auto, unique
 
 GPUS_PER_NODE = 8
 
@@ -24,3 +24,9 @@ class SageMakerParallelParams(Enum):
     TENSOR_MODEL_PARALLEL_DEGREE = "tensor_model_parallel_degree"
     EXPERT_MODEL_PARALLEL_DEGREE = "expert_model_parallel_degree"
     CONTEXT_MODEL_PARALLEL_DEGREE = "context_model_parallel_degree"
+
+
+class SageMakerCheckpointType(Enum):
+    FULL = auto()
+    SHARDED = auto()
+    LOCAL = auto()

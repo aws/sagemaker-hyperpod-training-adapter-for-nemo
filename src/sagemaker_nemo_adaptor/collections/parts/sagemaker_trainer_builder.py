@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import logging
+import sys
 from typing import Union
 
+from lightning_fabric.plugins import CheckpointIO
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 
@@ -27,6 +28,10 @@ from sagemaker_nemo_adaptor.collections.data import (
 from sagemaker_nemo_adaptor.collections.parts import (
     SageMakerDDPStrategy,
     SageMakerFSDPStrategy,
+)
+from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import (
+    SageMakerCheckpoint,
+    SageMakerCheckpointIO,
 )
 
 
@@ -81,23 +86,39 @@ class SageMakerTrainerBuilder:
         else:
             return SageMakerDDPStrategy(use_smp=self.cfg.use_smp, cfg=self.cfg, smp_config_dict=smp_config_dict)
 
+    def _create_checkpoin_io(self) -> CheckpointIO:
+        return SageMakerCheckpointIO()
+
+    def _create_plugins(self) -> list:
+        plugins = [self._create_checkpoin_io()]
+        return plugins
+
+    def _create_callbacks(self, callbacks=None) -> list:
+        assert callbacks is None or isinstance(callbacks, list)
+        callbacks = callbacks if callbacks else []
+        callbacks.append(SageMakerCheckpoint(self.cfg.model))
+        return callbacks
+
+    def _create_data_module(self, trainer):
+        if self.cfg.model.data.use_synthetic_data:
+            return DummyDataModule(self.cfg, trainer)
+        if self.cfg.model.data.dataset_type == "hf":
+            return HuggingFaceDataModule(self.cfg, trainer)
+        return MegatronDataModule(self.cfg, trainer)
+
     def create_trainer(self, callbacks=None) -> Trainer:
         strategy = self._training_strategy()
-        # TODO: Add callbacks for checkpoints
+        plugins = self._create_plugins()
+        callbacks = self._create_callbacks(callbacks)
 
+        # TODO: could be configurable with cfg.trainer
         trainer = Trainer(
             strategy=strategy,
             max_steps=self.cfg.trainer.max_steps,
             logger=False,  # Logger will be configured in exp_manager, set to false here to prevent conflict
-        )  # TODO: could be configurable with cfg.trainer
+            plugins=plugins,
+            callbacks=callbacks,
+        )
 
-        data_module = None
-        if self.cfg.model.data.use_synthetic_data:
-            data_module = DummyDataModule(self.cfg, trainer)
-        else:
-            if self.cfg.model.data.dataset_type == "hf":
-                data_module = HuggingFaceDataModule(self.cfg, trainer)
-            else:
-                data_module = MegatronDataModule(self.cfg, trainer)
-
+        data_module = self._create_data_module(trainer)
         return trainer, data_module

@@ -4,7 +4,7 @@ restore_from_path: null
 
 trainer:
   devices: 8
-  num_nodes: 1
+  num_nodes: 4
   accelerator: gpu
   precision: bf16
   max_steps: 50
@@ -16,7 +16,7 @@ trainer:
 
 exp_manager:
   exp_dir: /fsx/users/rnadimp/exp/
-  name: my_experiment
+  name: experiment
   create_tensorboard_logger: True
   create_checkpoint_callback: True
   checkpoint_callback_params:
@@ -29,6 +29,7 @@ distributed_backend: nccl
 # Start training from pretrained model
 model:
   model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
+  fsdp: True
   train_batch_size: 4
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1

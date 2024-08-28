@@ -38,19 +38,22 @@ export NCCL_DEBUG="INFO"
 export SM_NUM_GPUS=8
 export GPU_NUM_DEVICES=8
 
-TORCH_CMD="torchrun --nnodes=${NNODES} --nproc_per_node=8"
+TORCH_CMD="torchrun"
 
 # If nsys path provided, profile using Nsys, but only on 1st node. Requires job to be launched using sbatch
 if [[ -n $nsys_path ]]; then
-    profile_nsys=1
     if [[ $SLURM_PROCID -eq 1 ]]; then
         NSYS_CMD="nsys profile -w true -t cuda,nvtx,osrt,cudnn,cublas -s cpu  --capture-range=cudaProfilerApi --cuda-memory-usage=true --cudabacktrace=true -x true -o $nsys_path --force-overwrite=true"
         TORCH_CMD="$NSYS_CMD $TORCH_CMD"
     fi
-else
-    profile_nsys=0
 fi
 
 $TORCH_CMD \
-    --rdzv_endpoint=$MASTER_ADDR:29400 --rdzv_id=100 --rdzv_backend=c10d \
-    llama_pretrain.py
+    --rdzv_endpoint="${MASTER_ADDR}:29400" \
+    --rdzv_id=100 \
+    --rdzv_backend=c10d \
+    --nnodes="${NNODES}" \
+    --nproc_per_node="${GPU_NUM_DEVICES}" \
+    llama_pretrain.py \
+    "trainer.num_nodes=${NNODES}" \
+    "trainer.devices=${GPU_NUM_DEVICES}"

@@ -13,7 +13,10 @@
 # limitations under the License.
 
 import torch
+import torch.distributed as dist
+import torch.sagemaker as tsm
 from nemo.utils.env_var_parsing import get_envint
+from torch.sagemaker.utils.process_group_utils import get_global_ranks
 
 
 def is_global_rank_zero():
@@ -47,3 +50,24 @@ def get_rank():
         return 0
     else:
         return torch.distributed.get_rank()
+
+
+def is_action_rank(global_rank):
+    return tsm.ranker.get_rep_rank(global_rank) == 0
+
+
+def get_coordinator_rank(process_group):
+    return min(get_global_ranks(process_group))
+
+
+def get_current_replication_group(global_rank):
+    replication_group = None
+    replication_ranks = None
+    for ranks in tsm.state.ranker.get_rep_groups():
+        group = dist.new_group(ranks)
+        if global_rank in ranks:
+            replication_group = group
+            replication_ranks = ranks
+    assert replication_group, f"{global_rank} Replication group not found"
+    assert replication_ranks, f"{global_rank} Replication ranks not found"
+    return replication_ranks, replication_group
