@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import sys
+import logging
 from typing import Union
 
 from omegaconf import DictConfig
@@ -29,6 +30,19 @@ from sagemaker_nemo_adaptor.collections.parts import (
 )
 
 
+def _disable_flash_attn_info_log():
+    """Disable flash attn logs from transformer_engin.
+
+    Note that this is a workaround solution bc the issue was from Megatron 0.7
+    and tranformer_engine v1.8 by setting logging.basicConfig. The function can
+    be removed when Nvidia fix the issue.
+    """
+    logger = logging.getLogger("FusedAttention")
+    logger.setLevel(logging.WARNING)
+    logger = logging.getLogger("DotProductAttention")
+    logger.setLevel(logging.WARNING)
+
+
 class SageMakerTrainerBuilder:
     """
     Builder type to hide complex configuration of PTL Trainers for SMP/HF models.
@@ -37,6 +51,7 @@ class SageMakerTrainerBuilder:
 
     def __init__(self, cfg: DictConfig) -> None:
         self.cfg = cfg
+        _disable_flash_attn_info_log()
 
     def _training_strategy(self) -> Union[SageMakerDDPStrategy, SageMakerFSDPStrategy]:
         """
