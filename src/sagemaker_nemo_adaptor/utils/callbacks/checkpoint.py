@@ -1,6 +1,7 @@
 import os
 
 import pytorch_lightning as pl
+from nemo.utils import logging
 from pytorch_lightning import Callback
 
 from sagemaker_nemo_adaptor.utils.callbacks.ckpt_io import SageMakerCheckpointIO
@@ -15,6 +16,12 @@ class SageMakerCheckpoint(Callback):
     ):
         super().__init__(*a, **kw)
         self._checkpoint_dir = cfg.get("checkpoint_dir", None)
+        self._resume_from_checkpoint = cfg.get("resume_from_checkpoint", None)
+
+    def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if self._resume_from_checkpoint:
+            logging.info(f"load_checkpoint: {self._resume_from_checkpoint}")
+            self._load_checkpoint(trainer)
 
     def on_train_batch_end(
         self,
@@ -54,3 +61,10 @@ class SageMakerCheckpoint(Callback):
         checkpoint_io.wait()
         checkpoint_dir = self._get_checkpoint_dir(trainer)
         trainer.save_checkpoint(checkpoint_dir)
+
+    def _load_checkpoint(self, trainer):
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        path = self._resume_from_checkpoint
+        state_dict = trainer.strategy.load_checkpoint(path, trainer)
+        logging.debug(state_dict)

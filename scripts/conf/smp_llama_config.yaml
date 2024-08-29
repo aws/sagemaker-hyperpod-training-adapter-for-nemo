@@ -43,6 +43,10 @@ model:
   grad_clip: 1.0
   hf_pretrained_model: null # User can use this to start from a hf pretrained model
 
+  # checkpoint
+  # checkpoint_dir: /fsx/path/to/checkpoints
+  # resume_from_checkpoint: /fsx/path/to/checkpoints
+
 
   # FSDP Configs
   sharding_strategy: hybrid_shard

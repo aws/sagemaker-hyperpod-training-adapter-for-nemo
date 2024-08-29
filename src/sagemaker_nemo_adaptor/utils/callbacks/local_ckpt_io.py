@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 
+import pytorch_lightning as pl
 from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
 
@@ -19,6 +20,7 @@ class SageMakerLocalCheckpointIO(CheckpointIO):
     def load_checkpoint(
         self,
         path: _PATH,
+        trainer: "pl.Trainer" = None,
         map_location: Optional[Any] = None,
     ) -> Dict[str, Any]:
         raise NotImplementedError("SageMakerLocalCheckpointIO.load_checkpoint not implemented")

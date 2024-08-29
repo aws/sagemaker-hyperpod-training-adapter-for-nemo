@@ -15,12 +15,9 @@ from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 def train(cfg: DictConfig) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
-
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
     exp_manager(trainer, cfg.exp_manager)
-
     model_module = SageMakerMistralModel(cfg.model, trainer, use_smp=cfg.use_smp)
-
     trainer.fit(model_module, datamodule=data_module)
 
 

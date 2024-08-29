@@ -28,21 +28,26 @@ class SageMakerDDPStrategy(NLPDDPStrategy):
     def __init__(
         self,
         cfg: DictConfig,
-        use_smp: bool = True,
-        smp_config_dict: Dict = None,
-        # FSDP args
         **kwargs: Union[Any, Dict[str, Any]],
     ) -> None:
-        self.use_smp = use_smp
-        self.smp_config_dict = smp_config_dict
-
-        # # Set the mixed precision recipe TODO: Uncomment this once we moved FSDP setup back to strategy
-        # kwargs["mixed_precision"] = self._set_mixed_precision_recipe(
-        #     precision, grad_reduce_dtype, set_buffer_dtype=set_buffer_dtype
-        # )
+        self.cfg = cfg
+        self.use_smp = cfg.use_smp
+        self.smp_config_dict = self._setup_smp_config(cfg)
 
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPDDPStrategy, self).__init__(**kwargs)
+
+    def _setup_smp_config(self, cfg):
+        smp_config = {
+            "activation_loading_horizon": cfg.model.activation_loading_horizon,
+            "sm_activation_offloading": cfg.model.offload_activations > 0,
+            "tensor_parallel_degree": cfg.model.tensor_model_parallel_degree,
+            "expert_parallel_degree": cfg.model.expert_model_parallel_degree,
+            "random_seed": cfg.model.seed,
+        }
+        if cfg.model.shard_degree:
+            smp_config["hybrid_shard_degree"] = cfg.model.shard_degree
+        return smp_config
 
     def _setup_model(self, model: torch.nn.Module) -> torch.nn.Module:
         """Wraps the model into a :class:`~torch.distributed.fsdp.fully_sharded_data_parallel.FullyShardedDataParallel`

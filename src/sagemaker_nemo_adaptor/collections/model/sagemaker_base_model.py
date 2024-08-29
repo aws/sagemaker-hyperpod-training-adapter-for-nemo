@@ -26,7 +26,10 @@ from sagemaker_nemo_adaptor.utils.log_utils import Logger
 from sagemaker_nemo_adaptor.utils.train_utils import (
     compute_num_params,  # TODO: Find a more integrated way to compute num params, probably using lightning ModelSummary: https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.ModelSummary.html#lightning.pytorch.callbacks.ModelSummary
 )
-from sagemaker_nemo_adaptor.utils.train_utils import apply_activation_checkpoint
+from sagemaker_nemo_adaptor.utils.train_utils import (
+    apply_activation_checkpoint,
+    patch_neox_rope,
+)
 
 TF_VERSION = pversion.parse(transformers.__version__)
 
@@ -113,7 +116,6 @@ class SageMakerNLPBaseModel(NLPModel):
         mixed_precision_policy = set_mixed_precision_recipe(precision=self._cfg.precision, use_smp=self.use_smp)
         sharding_strategy = get_sharding_strategy(self._cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(self._cfg.backward_fetch_policy)
-
         param_init_fn, post_param_init_fn, model_context = self.delayed_param_init_fn(self._cfg.delayed_param)
 
         with model_context:
@@ -144,11 +146,11 @@ class SageMakerNLPBaseModel(NLPModel):
                 offload_wrapper,
             )
 
-            model = offload_wrapper(model)
+            self.model = offload_wrapper(self.model)
             if (
                 self.use_smp and self._cfg.model_type == "gpt_neox" and self._cfg.patch_neox_rope
             ):  # TODO: add a check to the model type and use enum for it
-                patch_neox_rope(model)
+                patch_neox_rope(self.model)
 
     def delayed_param_init_fn(self, enable):
         """

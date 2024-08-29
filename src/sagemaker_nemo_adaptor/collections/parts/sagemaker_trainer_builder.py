@@ -62,29 +62,17 @@ class SageMakerTrainerBuilder:
         """
         Returns a DDP or a FSDP strategy passed to Trainer.strategy.
         """
-        smp_config_dict = None
         # check interactive environment TODO: Currently not supporting interactive mode
         _IS_INTERACTIVE = hasattr(sys, "ps1") or bool(sys.flags.interactive)
 
         if _IS_INTERACTIVE and self.cfg.trainer.devices == 1:
             raise NotImplementedError(f"Currently we don't support interactive mode in SM adaptor")
 
-        if self.cfg.use_smp:  # TODO: we need recipe checker to check when use_smp is not provided
-            smp_config_dict = {
-                "activation_loading_horizon": self.cfg.model.activation_loading_horizon,
-                "sm_activation_offloading": self.cfg.model.offload_activations > 0,
-            }
-            if self.cfg.model.shard_degree is not None:
-                smp_config_dict["hybrid_shard_degree"] = self.cfg.model.shard_degree
-            smp_config_dict["tensor_parallel_degree"] = self.cfg.model.tensor_model_parallel_degree
-            smp_config_dict["expert_parallel_degree"] = self.cfg.model.expert_model_parallel_degree
-            smp_config_dict["random_seed"] = self.cfg.model.seed
-
         if self.cfg.use_smp or self.cfg.model.get("fsdp", True):
             # We're using FSDPStrategy for all SMP usecase for now
-            return SageMakerFSDPStrategy(use_smp=self.cfg.use_smp, cfg=self.cfg, smp_config_dict=smp_config_dict)
+            return SageMakerFSDPStrategy(self.cfg)
         else:
-            return SageMakerDDPStrategy(use_smp=self.cfg.use_smp, cfg=self.cfg, smp_config_dict=smp_config_dict)
+            return SageMakerDDPStrategy(self.cfg)
 
     def _create_checkpoin_io(self) -> CheckpointIO:
         return SageMakerCheckpointIO()

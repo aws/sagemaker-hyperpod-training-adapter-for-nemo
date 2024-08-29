@@ -1,4 +1,5 @@
 import hydra
+from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 from utils import enable_dummy_sm_env
@@ -12,17 +13,11 @@ from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 
 
 def train(cfg: DictConfig) -> None:
-    from nemo.utils import logging
-
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
-
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
-
     exp_manager(trainer, cfg.exp_manager)
-
     model_module = SageMakerLlamaModel(cfg.model, trainer, use_smp=cfg.use_smp)
-
     trainer.fit(model_module, datamodule=data_module)
 
 
@@ -33,10 +28,4 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    import logging
-
-    logger = logging.getLogger("FusedAttention")
-    logger.setLevel(logging.WARNING)
-    logger = logging.getLogger("DotProductAttention")
-    logger.setLevel(logging.WARNING)
     main()

@@ -13,12 +13,12 @@ TESTS
 
 
 def test_init(full_config):
-    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    full_config.use_smp = True
+    strategy = SageMakerFSDPStrategy(full_config)
     assert isinstance(strategy, NLPFSDPStrategy)
     assert isinstance(strategy, SageMakerFSDPStrategy)
     assert strategy.cfg == full_config
     assert strategy.use_smp == True
-    assert strategy.smp_config_dict == {}
 
 
 class Test_set_mixed_precision_recipe:
@@ -30,7 +30,8 @@ class Test_setup_model:
 
 
 def test_setup(mocker, full_config):
-    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    full_config.use_smp = True
+    strategy = SageMakerFSDPStrategy(full_config)
     parent_cls = strategy.__class__.__bases__[0]
     grandparent_cls = parent_cls.__bases__[0]
     parent_cls.setup = parent_setup_mock = mocker.Mock()
@@ -51,7 +52,8 @@ def test_setup_environment(mocker, full_config):
     tsm_mock = mocker.patch(MODULE_PATH + ".tsm", return_value=test_tsm_rank)
 
     # strategy setup
-    strategy = SageMakerFSDPStrategy(full_config, True, {})
+    full_config.use_smp = True
+    strategy = SageMakerFSDPStrategy(full_config)
     parent_cls = strategy.__class__.__bases__[0]
     grandparent_cls = parent_cls.__bases__[0]
     parent_cls.setup_environment = parent_setup_mock = mocker.Mock()

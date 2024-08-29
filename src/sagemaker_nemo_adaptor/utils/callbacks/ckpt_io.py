@@ -1,8 +1,10 @@
 from typing import Any, Dict, Optional
 
+import pytorch_lightning as pl
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
 from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
+from nemo.utils import logging
 
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
@@ -32,17 +34,21 @@ class SageMakerCheckpointIO(CheckpointIO):
         typ = self._checkpoint_type
         if typ not in self._checkpoint_io:
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
-        return self._checkpoint_io[typ].save_checkpoint(checkpoint, path, storage_options)
+        logging.info(f"save_checkpoint: {path}")
+        checkpoint_io = self._checkpoint_io[typ]
+        return checkpoint_io.save_checkpoint(checkpoint, path, storage_options)
 
     def load_checkpoint(
         self,
         path: _PATH,
+        trainer: "pl.Trainer",
         map_location: Optional[Any] = None,
     ) -> Dict[str, Any]:
         typ = self._checkpoint_type
         if typ not in self._checkpoint_io:
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
-        return self._checkpoint_io[typ].load_checkpoint(path, map_location)
+        checkpoint_io = self._checkpoint_io[typ]
+        return checkpoint_io.load_checkpoint(path, trainer, map_location)
 
     def remove_checkpoint(self, path: _PATH) -> None:
         typ = self._checkpoint_type

@@ -106,6 +106,7 @@ class BaseModelConfig(BaseModel):
     model_type: str = Field(default=ModelType.LLAMA_V3.value)
 
     train_batch_size: int = Field(default=2, ge=1)
+    fsdp: bool = True
     moe: bool = False
     sequence_parallel: bool = True
     activation_checkpointing: bool = True
@@ -115,6 +116,8 @@ class BaseModelConfig(BaseModel):
     seed: int = 12345
     grad_clip: float = Field(default=1.0, ge=0)  # 0 == disabled
     hf_pretrained_model: Optional[str] = None
+    checkpoint_dir: Optional[str] = None
+    resume_from_checkpoint: Optional[str] = None
 
     # FSDP Configs
     sharding_strategy: Literal[
