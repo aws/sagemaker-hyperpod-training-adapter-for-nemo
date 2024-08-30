@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import copy
 from typing import Dict, Optional, Union
@@ -9,6 +9,7 @@ from typing import Dict, Optional, Union
 from nemo.collections.common.callbacks import EMA
 from nemo.utils import logging
 from nemo.utils.app_state import AppState
+from nemo.utils.exp_manager import CallbackParams
 from nemo.utils.exp_manager import ExpManagerConfig as NeMoExpManagerConfig
 from nemo.utils.exp_manager import (
     StatelessTimer,
@@ -25,9 +26,16 @@ from sagemaker_nemo_adaptor.utils.get_rank import is_global_rank_zero
 
 
 @dataclass
+class SageMakerExportFullModel(CallbackParams):
+    every_n_train_steps = 0
+
+
+@dataclass
 class ExpManagerConfig(NeMoExpManagerConfig):
     # TODO: add our customized params if needed
     log_reduced_training_loss: Optional[bool] = True
+    export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
+    checkpoint_dir: Optional[str] = None
 
 
 def error_checks(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None):

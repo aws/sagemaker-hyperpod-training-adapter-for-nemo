@@ -84,7 +84,7 @@ class SageMakerTrainerBuilder:
     def _create_callbacks(self, callbacks=None) -> list:
         assert callbacks is None or isinstance(callbacks, list)
         callbacks = callbacks if callbacks else []
-        callbacks.append(SageMakerCheckpoint(self.cfg.model))
+        callbacks.append(SageMakerCheckpoint(self.cfg))
         return callbacks
 
     def _create_data_module(self, trainer):

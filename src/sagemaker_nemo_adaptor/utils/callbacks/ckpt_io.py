@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
-from lightning_fabric.plugins import CheckpointIO
+from lightning_fabric.plugins import CheckpointIO, TorchCheckpointIO
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
 
@@ -20,9 +20,11 @@ class SageMakerCheckpointIO(CheckpointIO):
         self._checkpoint_type = SageMakerCheckpointType.SHARDED
         sharded_checkpoint_io = SageMakerShardedCheckpointIO(*a, **kw)
         local_checkpoint_io = SageMakerLocalCheckpointIO(*a, **kw)
+        full_checkpoint_io = TorchCheckpointIO(*a, **kw)
         self._checkpoint_io = {
             SageMakerCheckpointType.SHARDED: sharded_checkpoint_io,
             SageMakerCheckpointType.LOCAL: local_checkpoint_io,
+            SageMakerCheckpointType.FULL: full_checkpoint_io,
         }
 
     def save_checkpoint(

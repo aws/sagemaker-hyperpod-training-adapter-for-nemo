@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
 import torch
+import torch.distributed as dist
 import torch.sagemaker as tsm
 from lightning_fabric.utilities.types import _PATH
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
@@ -9,6 +10,7 @@ from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import StateDictType
+from torch.distributed.fsdp.api import FullOptimStateDictConfig, FullStateDictConfig
 from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
     SMStateDictType,
     sm_state_dict_type,
@@ -95,9 +97,16 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
             return self.model.state_dict()
 
+    @property
+    def full_model_state_dict(self):
+        state_dict_config = None
+        state_dict_config = FullStateDictConfig(rank0_only=True, offload_to_cpu=True)
+        with sm_state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
+            return self.model.state_dict()
+
     def lightning_module_state_dict(self) -> Dict[str, Any]:
         """
-        Store the model state dict in one of full or sharded format.
+        Store the model state dict in one of full, sharded or local format.
         """
         assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
         typ = self.checkpoint_io.checkpoint_type
@@ -105,6 +114,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.local_model_state_dict
         if typ == SageMakerCheckpointType.SHARDED:
             return self.sharded_model_state_dict
+        if typ == SageMakerCheckpointType.FULL:
+            return self.full_model_state_dict
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def sharded_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
@@ -118,9 +129,16 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
             return optimizer.state_dict()
 
+    def full_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
+        optim_state_dict_config = FullOptimStateDictConfig(rank0_only=True, offload_to_cpu=True)
+        with sm_state_dict_type(
+            self.model, StateDictType.FULL_STATE_DICT, optim_state_dict_config=optim_state_dict_config
+        ):
+            return FSDP.optim_state_dict(self.model, optimizer)
+
     def optimizer_state(self, optimizer: torch.optim.Optimizer) -> Dict[str, torch.Tensor]:
         """
-        Store the full optimizer state dict in one of full or sharded format.
+        Store the optimizer state dict in one of full, sharded or local format.
         """
         assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
         typ = self.checkpoint_io.checkpoint_type
@@ -128,6 +146,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.local_optimizer_state_dict(optimizer)
         if typ == SageMakerCheckpointType.SHARDED:
             return self.sharded_optimizer_state_dict(optimizer)
+        if typ == SageMakerCheckpointType.FULL:
+            return self.full_optimizer_state_dict(optimizer)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def load_model_state_dict(self, checkpoint: Mapping[str, Any], strict=None) -> None:
@@ -154,6 +174,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         1. In case of sharded checkpoint, all ranks store unique checkpoints.
         2. In case of non-sharded checkpoint, all data-parallel rank 0 store checkpoints.
         """
+        if self.checkpoint_io.checkpoint_type == SageMakerCheckpointType.FULL and dist.get_rank() != 0:
+            return
         self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options)
 
     def load_checkpoint(

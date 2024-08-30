@@ -15,12 +15,15 @@ trainer:
 
 
 exp_manager:
-  exp_dir: /fsx/users/rnadimp/exp/
+  exp_dir: ???
   name: experiment
   create_tensorboard_logger: True
   create_checkpoint_callback: True
   checkpoint_callback_params:
     save_top_k: 10
+  checkpoint_dir: ${exp_manager.exp_dir}/checkpoints/
+  export_full_model:
+    every_n_train_steps: 10
 
 use_smp: True #enable Rubik
 distributed_backend: nccl
@@ -42,10 +45,6 @@ model:
   seed: 12345
   grad_clip: 1.0
   hf_pretrained_model: null # User can use this to start from a hf pretrained model
-
-  # checkpoint
-  # checkpoint_dir: /fsx/path/to/checkpoints
-  # resume_from_checkpoint: /fsx/path/to/checkpoints
 
 
   # FSDP Configs

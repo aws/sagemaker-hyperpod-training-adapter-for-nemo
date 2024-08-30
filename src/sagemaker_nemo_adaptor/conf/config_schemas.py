@@ -226,12 +226,18 @@ class BaseCheckpointCallbackConfig(BaseModel):
     save_top_k: int = Field(default=10, ge=0)  # 0 == no checkpointing
 
 
+class BaseExportFullModelConfig(BaseModel):
+    every_n_train_steps: int = Field(default=0, ge=0)
+
+
 class BaseExpManager(BaseModel):
     exp_dir: str = "/fsx/users/rnadimp/exp/"
     name: str = "my_experiment"
     create_tensorboard_logger: bool = True
     create_checkpoint_callback: bool = True
     checkpoint_callback_params: BaseCheckpointCallbackConfig = Field(default_factory=BaseCheckpointCallbackConfig)
+    export_full_model: BaseExportFullModelConfig = Field(default_factory=BaseExportFullModelConfig)
+    checkpoint_dir: Optional[str] = None
 
 
 class BaseInternalConfig(BaseModel):
