@@ -9,6 +9,7 @@ from sagemaker_nemo_adaptor.conf.config_schemas import (
     BaseModelDataConfig,
     BaseModelOptimizerConfig,
     BaseModelOptimizerScheduler,
+    BaseRunConfig,
     BaseTrainerConfig,
     LlamaV3Config,
     LlamaV3ConfigWithSMP,
@@ -402,6 +403,49 @@ class Test_BaseExpManager:
     def build_config(self, **kwargs) -> dict:
         return {
             "exp_dir": "/some/dir",
+            **kwargs,
+        }
+
+
+class Test_BaseRunConfig:
+    def test_happy_path(self):
+        config = self.build_config()
+
+        try:
+            validated = BaseRunConfig.model_validate(config)
+            assert validated is not None
+        except Exception as e:
+            pytest.fail(f"Unexpectedly failed to validate config: {e}")
+
+    def test_no_args(self):
+        try:
+            validated = BaseRunConfig()
+            assert validated.name == "llama-8b"
+        except Exception as e:
+            pytest.fail(f"Unexpectedly failed to validate config: {e}")
+
+    def test_default_value(self):
+        config = self.build_config()
+        del config["name"]
+
+        try:
+            validated = BaseRunConfig.model_validate(config)
+            assert validated.name == "llama-8b"
+        except Exception as e:
+            pytest.fail(f"Unexpectedly failed to validate config: {e}")
+
+    def test_outside_of_range(self):
+        invalid_val = 123
+        config = self.build_config(name=invalid_val)
+
+        with pytest.raises(ValidationError):
+            BaseRunConfig.model_validate(config)
+
+    def build_config(self, **kwargs) -> dict:
+        return {
+            "name": "test_name",
+            "results_dir": "/some/dir",
+            "time_limit": "6-00:00:00",
             **kwargs,
         }
 

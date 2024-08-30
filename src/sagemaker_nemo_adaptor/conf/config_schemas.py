@@ -244,6 +244,12 @@ class BaseInternalConfig(BaseModel):
     config_verified: bool = True
 
 
+class BaseRunConfig(BaseModel):
+    name: str = "llama-8b"
+    results_dir: Optional[str] = None
+    time_limit: Optional[str] = None
+
+
 class BaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -257,6 +263,7 @@ class BaseConfig(BaseModel):
     trainer: BaseTrainerConfig
     exp_manager: Optional[BaseExpManager] = None
     internal: BaseInternalConfig = Field(default_factory=BaseInternalConfig)
+    run: Optional[BaseRunConfig] = None
 
     @model_validator(mode="before")
     def before_model_validations(cls, data: Any) -> Any:
