@@ -36,7 +36,7 @@ distributed_backend: nccl
 model:
   model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
   fsdp: True
-  train_batch_size: 4
+  train_batch_size: 2
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1
   moe: False
@@ -60,7 +60,7 @@ model:
   use_orig_param: False
 
   # model architecture
-  max_context_width: 4096
+  max_context_width: 8192
   max_position_embeddings: ${.max_context_width}
   num_layers: 32
   hidden_width: 4096
@@ -70,7 +70,7 @@ model:
   pad_token_id: 0
   layernorm_epsilon: 1e-5
   attention_bias: False
-  vocab_size: 32000
+  vocab_size: 128256
   activation: 'gelu'
   num_key_value_heads: null
   use_flash_attention: True

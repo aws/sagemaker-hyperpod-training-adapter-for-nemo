@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
@@ -8,13 +9,17 @@ from lightning_fabric.utilities.types import _PATH
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import StateDictType
 from torch.distributed.fsdp.api import FullOptimStateDictConfig, FullStateDictConfig
+from torch.sagemaker.delayed_param import DelayedParamIniter
 from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
     SMStateDictType,
     sm_state_dict_type,
 )
+from torch.sagemaker.grad_norm import clip_grad_norm_
+from torch.sagemaker.utils import utils as tsm_utils
 
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import SageMakerCheckpointIO
@@ -24,6 +29,16 @@ from sagemaker_nemo_adaptor.utils.fsdp_utils import (
     get_backward_fetch_policy,
     get_sharding_strategy,
     get_transformer_layer,
+    set_mixed_precision_recipe,
+)
+from sagemaker_nemo_adaptor.utils.get_rank import (
+    get_coordinator_rank,
+    get_current_replication_group,
+    is_action_rank,
+)
+from sagemaker_nemo_adaptor.utils.train_utils import (
+    apply_activation_checkpoint,
+    patch_neox_rope,
 )
 
 
@@ -62,9 +77,93 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             smp_config["hybrid_shard_degree"] = cfg.model.shard_degree
         return smp_config
 
+    def _setup_model(self, model):
+        use_smp = self.use_smp
+        cfg = self.cfg.model
+        transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
+        auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer)
+        mixed_precision_policy = set_mixed_precision_recipe(precision=cfg.precision, use_smp=use_smp)
+        sharding_strategy = get_sharding_strategy(cfg.sharding_strategy)
+        backward_prefetch = get_backward_fetch_policy(cfg.backward_fetch_policy)
+        param_init_fn, post_param_init_fn, model_context = self._setup_delayed_param(cfg, model)
+
+        with (
+            model_context,
+            tsm_utils.timeit(True, "FSDP constructor", self.global_rank),
+        ):
+            model = FSDP(
+                module=model,
+                auto_wrap_policy=auto_wrap_policy,
+                mixed_precision=mixed_precision_policy,
+                sharding_strategy=sharding_strategy,
+                backward_prefetch=backward_prefetch,
+                forward_prefetch=cfg.forward_prefetch,
+                limit_all_gathers=cfg.limit_all_gathers,
+                device_id=torch.cuda.current_device(),
+                use_orig_params=cfg.use_orig_param,
+                param_init_fn=param_init_fn,
+                post_param_init_fn=post_param_init_fn,
+                sync_module_states=cfg.finetune_with_pretrained_weights,
+            )
+
+        if cfg.activation_checkpointing:
+            apply_activation_checkpoint(
+                model=model,
+                model_type=cfg.model_type,
+                use_smp=use_smp,
+                fp8=cfg.fp8,
+                moe=cfg.moe,
+            )
+        if cfg.offload_activations:
+            model = offload_wrapper(model)
+            if cfg.model_type == "gpt_neox" and cfg.patch_neox_rope:
+                # TODO: add a check to the model type and use enum for it
+                patch_neox_rope(model)
+
+        return model
+
+    def _setup_delayed_param(self, cfg, model):
+        if not cfg.delayed_param:
+            return None, None, nullcontext()
+        if self.use_smp:
+            return self._setup_smp_delayed_param(cfg, model)
+        return self._setup_non_smp_delayed_param(cfg, model)
+
+    def _setup_non_smp_delayed_param(self, cfg, model):
+        if cfg.finetune_with_pretrained_weights:
+            # Pulled param initialization function from open source meta/llama training recipes
+            # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
+            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+        else:
+            # TODO (rnadimp) add a proper param init funct for non-smp case
+            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+        return param_init_fn, None, nullcontext()
+
+    def _setup_smp_delayed_param(self, cfg, model):
+        initer = None
+        if cfg.finetune_with_pretrained_weights:
+            if self.global_rank != 0:
+                initer = DelayedParamIniter(model.model)
+        else:
+            initer = DelayedParamIniter(model.model)
+
+        if not initer:
+            return None, None, nullcontext()
+        return (
+            initer.get_param_init_fn(),
+            initer.get_post_param_init_fn(),
+            initer.validate_params_and_buffers_inited() if not cfg.finetune_with_pretrained_weights else nullcontext(),
+        )
+
     def setup(self, trainer: "pl.Trainer") -> None:
         super(NLPFSDPStrategy, self).setup(trainer)
-        logging.info(f"Training Model: {self.model}")
+        logging.info(f"Training Model:\n{self.model}")
+
+    def optimizer_step(self, *a, **kw):
+        if self.use_smp:
+            grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
+        logging.debug(f"grad_norm: {grad_norm}")
+        super().optimizer_step(*a, **kw)
 
     def setup_environment(self) -> None:
         """
@@ -73,7 +172,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).setup_environment()
 
-        # Initialize smp, todo: check whether we still need this for HF case
         if self.use_smp:
             tsm.init(self.smp_config_dict)
 

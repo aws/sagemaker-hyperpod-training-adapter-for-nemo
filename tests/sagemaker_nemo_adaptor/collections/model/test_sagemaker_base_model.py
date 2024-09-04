@@ -1,5 +1,5 @@
 import pytest
-from nemo.collections.nlp.models.nlp_model import NLPModel
+from nemo.core.classes.modelPT import ModelPT
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from packaging import version as pversion
@@ -38,7 +38,7 @@ TESTS
 def test_init(full_config):
     """__init__()"""
     base = build_base_model(full_config.model)
-    assert isinstance(base, NLPModel)
+    assert isinstance(base, ModelPT)
     assert isinstance(base, SageMakerNLPBaseModel)
 
 
@@ -102,7 +102,7 @@ class TestBuildModel:
         ("version", "exp_args_len", "exp_kwargs_len"),
         [
             [transformers_below_version, 1, 0],
-            [transformers_threshold_version, 1, 1],
+            [transformers_threshold_version, 1, 2],
         ],
     )
     def test_no_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
@@ -224,7 +224,7 @@ class TestSetupOptimization:
         # set mocks only once
         if T.setup_optimization_spy is None:
             T.max_steps = 5
-            T.setup_optimization_spy = mocker.patch("nemo.collections.nlp.models.nlp_model.NLPModel.setup_optimization")
+            T.setup_optimization_spy = mocker.patch("nemo.core.classes.modelPT.ModelPT.setup_optimization")
             T._get_max_steps_spy = mocker.patch(
                 MODULE_PATH + ".SageMakerNLPBaseModel._get_max_steps",
                 return_value=T.max_steps,
