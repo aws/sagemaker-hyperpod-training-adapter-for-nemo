@@ -68,3 +68,7 @@ class SageMakerCheckpointIO(CheckpointIO):
     @checkpoint_type.setter
     def checkpoint_type(self, typ: SageMakerCheckpointType):
         self._checkpoint_type = typ
+
+    def get_checkpoint_io(self, typ):
+        assert typ in self._checkpoint_io, f"{typ} is not supported"
+        return self._checkpoint_io[typ]

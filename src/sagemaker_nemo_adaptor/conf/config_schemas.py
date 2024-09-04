@@ -10,7 +10,11 @@ from pydantic import (
 )
 from pydantic_core.core_schema import FieldValidationInfo
 
-from sagemaker_nemo_adaptor.constants import GPUS_PER_NODE, ModelType
+from sagemaker_nemo_adaptor.constants import (
+    GPUS_PER_NODE,
+    ModelType,
+    SageMakerMonitorMode,
+)
 from sagemaker_nemo_adaptor.utils.general_utils import is_power_of_two
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
@@ -224,6 +228,9 @@ class BaseTrainerConfig(BaseModel):
 
 class BaseCheckpointCallbackConfig(BaseModel):
     save_top_k: int = Field(default=10, ge=0)  # 0 == no checkpointing
+    every_n_train_steps: int = Field(default=0, ge=0)
+    monitor: str = "step"
+    mode: str = Field(default=SageMakerMonitorMode.MAX.value)
 
 
 class BaseExportFullModelConfig(BaseModel):

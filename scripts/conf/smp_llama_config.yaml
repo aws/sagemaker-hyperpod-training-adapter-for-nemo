@@ -21,6 +21,9 @@ exp_manager:
   create_checkpoint_callback: True
   checkpoint_callback_params:
     save_top_k: 10
+    every_n_train_steps: 10
+    monitor: "step"
+    mode: "max"
   checkpoint_dir: ${exp_manager.exp_dir}/checkpoints/
   export_full_model:
     every_n_train_steps: 10

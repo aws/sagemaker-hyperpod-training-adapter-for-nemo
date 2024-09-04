@@ -30,3 +30,8 @@ class SageMakerCheckpointType(Enum):
     FULL = auto()
     SHARDED = auto()
     LOCAL = auto()
+
+
+class SageMakerMonitorMode(Enum):
+    MAX = "max"
+    MIN = "min"
