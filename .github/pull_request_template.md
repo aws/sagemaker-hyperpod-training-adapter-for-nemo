@@ -20,5 +20,6 @@ Put an x in the boxes that apply. If you're unsure about any of them, don't hesi
 ### Tests
  - [ ] I have run `pytest` on my code and all unit tests passed.
  - [ ] I have added tests that prove my fix is effective or that my feature works (if appropriate)
+ - [ ] I have ran a training job with real data (huggingface dataloader instead of synthetic data) and validated that the loss value goes down.
 
 By submitting this pull request, I confirm that my contribution is made under the terms of the Apache 2.0 license.

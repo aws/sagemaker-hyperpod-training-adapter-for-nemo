@@ -56,6 +56,21 @@ addopts = [
 ]
 ```
 
+### Non-synthetic Tests
+To run a non-synthetic test change ```use_synthetic_data``` in your ```model-config.yaml``` file from ```False``` to ```True```. Make sure ```dataset_type: hf``` and that ```train_dir``` and ```val_dir``` point to valid datasets in ```/fsx/datasets```
+Example (c4 dataset pre-tokenized with llama3 tokenizer):
+```
+data:
+    train_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/train"]
+    val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
+    dataset_type: hf
+    use_synthetic_data: True
+    zipped_data: False
+```
+Additional considerations:
+1. Make sure you have a ```vocab_size``` that fits your model.
+2. Make sure your ```max_context_width``` aligns with the sequence length that the dataset was tokenized at.
+
 ## Contributing
 
 ### Formatting code
