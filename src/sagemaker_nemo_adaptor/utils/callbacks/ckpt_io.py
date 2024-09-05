@@ -1,12 +1,17 @@
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
-import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
-from lightning_fabric.plugins import CheckpointIO, TorchCheckpointIO
+from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
 
-from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
+from sagemaker_nemo_adaptor.constants import (
+    OPTIMIZER_KEY_PREFIX,
+    SageMakerCheckpointType,
+)
+from sagemaker_nemo_adaptor.utils.callbacks.full_ckpt_io import (
+    SageMakerFullCheckpointIO,
+)
 from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
     SageMakerLocalCheckpointIO,
 )
@@ -20,7 +25,7 @@ class SageMakerCheckpointIO(CheckpointIO):
         self._checkpoint_type = SageMakerCheckpointType.SHARDED
         sharded_checkpoint_io = SageMakerShardedCheckpointIO(*a, **kw)
         local_checkpoint_io = SageMakerLocalCheckpointIO(*a, **kw)
-        full_checkpoint_io = TorchCheckpointIO(*a, **kw)
+        full_checkpoint_io = SageMakerFullCheckpointIO(*a, **kw)
         self._checkpoint_io = {
             SageMakerCheckpointType.SHARDED: sharded_checkpoint_io,
             SageMakerCheckpointType.LOCAL: local_checkpoint_io,
@@ -37,6 +42,10 @@ class SageMakerCheckpointIO(CheckpointIO):
         if typ not in self._checkpoint_io:
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
         logging.info(f"save_checkpoint: {path}")
+        if "optimizer_states" in checkpoint:
+            optimizers = checkpoint.pop("optimizer_states")
+            for i, optim in enumerate(optimizers):
+                checkpoint[f"{OPTIMIZER_KEY_PREFIX}_{i}"] = optim
         checkpoint_io = self._checkpoint_io[typ]
         return checkpoint_io.save_checkpoint(checkpoint, path, storage_options)
 
@@ -58,9 +67,6 @@ class SageMakerCheckpointIO(CheckpointIO):
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
         return self._checkpoint_io[typ].remove_checkpoint(path)
 
-    def wait(self):
-        saver.maybe_finalize_async_calls(blocking=True)
-
     @property
     def checkpoint_type(self):
         return self._checkpoint_type
@@ -69,6 +75,7 @@ class SageMakerCheckpointIO(CheckpointIO):
     def checkpoint_type(self, typ: SageMakerCheckpointType):
         self._checkpoint_type = typ
 
-    def get_checkpoint_io(self, typ):
-        assert typ in self._checkpoint_io, f"{typ} is not supported"
-        return self._checkpoint_io[typ]
+    def teardown(self, trainer):
+        typ = SageMakerCheckpointType.SHARDED
+        checkpoint_io = self._checkpoint_io[typ]
+        checkpoint_io.teardown(trainer)

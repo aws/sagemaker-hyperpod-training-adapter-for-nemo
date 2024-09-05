@@ -1,4 +1,3 @@
-import logging
 import os
 from copy import deepcopy
 from dataclasses import dataclass
@@ -7,7 +6,7 @@ from typing import Dict, Union
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
-from nemo.utils import logging
+from nemo.utils import AppState, logging
 from pytorch_lightning import Callback
 from torch import Tensor
 from torch.sagemaker import state
@@ -49,7 +48,7 @@ class SageMakerCheckpoint(Callback):
         """
         super().__init__(*a, **kw)
         self._checkpoint_dir = cfg.exp_manager.get("checkpoint_dir", None)
-        self._resume_from_checkpoint = cfg.get("resume_from_checkpoint", None)
+        self._resume_from_checkpoint = cfg.exp_manager.get("resume_from_checkpoint", None)
         # Full checkpoint
         self._save_full_every_n_steps = None
         if "export_full_model" in cfg.exp_manager:
@@ -74,7 +73,14 @@ class SageMakerCheckpoint(Callback):
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if self._resume_from_checkpoint:
             logging.info(f"load_checkpoint: {self._resume_from_checkpoint}")
-            self._load_checkpoint(trainer)
+            typ = SageMakerCheckpointType.SHARDED
+            path = self._resume_from_checkpoint
+            self._load_checkpoint(trainer, path, typ)
+
+    def on_train_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        checkpoint_io.teardown(trainer)
 
     def on_train_batch_end(
         self,
@@ -86,9 +92,14 @@ class SageMakerCheckpoint(Callback):
 
     def _get_checkpoint_dir(self, trainer):
         if not self._checkpoint_dir:
-            path = os.path.join(trainer.default_root_dir, "checkpoints")
+            app_state = AppState()
+            path = os.path.join(app_state.exp_dir, "checkpoints")
             self._checkpoint_dir = path
         return self._checkpoint_dir
+
+    def _should_save_local(self, trainer: "pl.Trainer"):
+        # TODO: check when should save local checkpoints for resilience
+        return False
 
     def _should_save_full(self, trainer: "pl.Trainer"):
         """
@@ -191,9 +202,34 @@ class SageMakerCheckpoint(Callback):
     ):
         """Save one checkpoint using corresponding checkpoint type."""
         checkpoint_io.checkpoint_type = checkpoint_type
-        trainer.save_checkpoint(checkpoint_dir, weights_only=checkpoint_type == SageMakerCheckpointType.FULL)
+        weights_only = checkpoint_type == SageMakerCheckpointType.FULL
+        trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
         if dist.get_rank() == 0:
             logging.info(f"Saving {checkpoint_type} Checkpoint to {checkpoint_dir}")
+
+    def _save_local(self, trainer: "pl.Trainer", path):
+        path = os.path.join(path, "local", f"steps_{trainer.global_step}")
+        return SageMakerCheckpointType.LOCAL, path
+
+    def _save_full(self, trainer: "pl.Trainer", path):
+        path = os.path.join(path, "full", f"steps_{trainer.global_step}")
+        return SageMakerCheckpointType.FULL, path
+
+    def _save_sharded(self, trainer: "pl.Trainer", path, monitor_candidates):
+        score = monitor_candidates.get(self._monitor)
+        name = self.format_sharded_checkpoint_path(score)
+        sub_dir = os.path.join(f"tp{state.tp_rank}_ep{state.ep_rank}", name)
+        sharded_checkpoint_dir = os.path.join(path, "sharded", sub_dir)
+        new_checkpoint = TopkCheckPoint(
+            monitor=self._monitor,
+            score=score,
+            checkpoint_path=sharded_checkpoint_dir,
+            step_at_save=trainer.global_step,
+            epoch_at_save=trainer.current_epoch,
+        )
+        checkpoint_io = trainer.strategy.checkpoint_io
+        self._update_topk(new_checkpoint, checkpoint_io)
+        return SageMakerCheckpointType.SHARDED, sharded_checkpoint_dir
 
     def _save_checkpoints(self, trainer: "pl.Trainer"):
         """
@@ -201,38 +237,24 @@ class SageMakerCheckpoint(Callback):
         """
         checkpoint_io = trainer.strategy.checkpoint_io
         assert isinstance(checkpoint_io, SageMakerCheckpointIO)
-        checkpoint_io.wait()
-
         checkpoint_info = []
+        checkpoint_dir = self._get_checkpoint_dir(trainer)
         monitor_candidates = self._monitor_candidates(trainer)
 
+        if self._should_save_local(trainer):
+            checkpoint_info.append(self._save_local(trainer, checkpoint_dir))
         if self._should_save_sharded(trainer, monitor_candidates):
-            score = monitor_candidates.get(self._monitor)
-            sub_dir = f"sharded/tp{state.tp_rank}_ep{state.ep_rank}/{self.format_sharded_checkpoint_path(score)}/"
-            sharded_checkpoint_dir = os.path.join(self._get_checkpoint_dir(trainer), sub_dir)
-            checkpoint_info.append((SageMakerCheckpointType.SHARDED, sharded_checkpoint_dir))
-            new_checkpoint = TopkCheckPoint(
-                monitor=self._monitor,
-                score=score,
-                checkpoint_path=sharded_checkpoint_dir,
-                step_at_save=trainer.global_step,
-                epoch_at_save=trainer.current_epoch,
-            )
-            self._update_topk(new_checkpoint, checkpoint_io)
-
+            checkpoint_info.append(self._save_sharded(trainer, checkpoint_dir, monitor_candidates))
         if self._should_save_full(trainer):
-            checkpoint_info.append(
-                (
-                    SageMakerCheckpointType.FULL,
-                    os.path.join(self._get_checkpoint_dir(trainer), f"full/steps_{trainer.global_step}/"),
-                )
-            )
+            checkpoint_info.append(self._save_full(trainer, checkpoint_dir))
         for checkpoint_type, checkpoint_dir in checkpoint_info:
             self._save(trainer, checkpoint_io, checkpoint_type, checkpoint_dir)
 
-    def _load_checkpoint(self, trainer):
+    def _load_checkpoint(self, trainer, path, typ):
         checkpoint_io = trainer.strategy.checkpoint_io
         assert isinstance(checkpoint_io, SageMakerCheckpointIO)
-        path = self._resume_from_checkpoint
+        checkpoint_io.checkpoint_type = typ
         state_dict = trainer.strategy.load_checkpoint(path, trainer)
         logging.debug(state_dict)
+        trainer.strategy.load_model_state_dict(state_dict)
+        trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)

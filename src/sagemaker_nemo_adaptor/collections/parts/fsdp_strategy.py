@@ -10,10 +10,18 @@ from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
+from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import StateDictType
 from torch.distributed.fsdp.api import FullOptimStateDictConfig, FullStateDictConfig
+from torch.sagemaker.checkpoint.constants import (
+    SMP_IS_LOAD_INFO_KEY,
+    SMP_IS_PARTIAL_KEY,
+)
 from torch.sagemaker.delayed_param import DelayedParamIniter
+from torch.sagemaker.distributed.checkpoint.filesystem import (
+    DistributedFileSystemReader,
+)
 from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
     SMStateDictType,
     sm_state_dict_type,
@@ -21,7 +29,10 @@ from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
 from torch.sagemaker.grad_norm import clip_grad_norm_
 from torch.sagemaker.utils import utils as tsm_utils
 
-from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
+from sagemaker_nemo_adaptor.constants import (
+    OPTIMIZER_KEY_PREFIX,
+    SageMakerCheckpointType,
+)
 from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import SageMakerCheckpointIO
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
 from sagemaker_nemo_adaptor.utils.fsdp_utils import (
@@ -199,7 +210,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     @property
     def full_model_state_dict(self):
-        state_dict_config = None
         state_dict_config = FullStateDictConfig(rank0_only=True, offload_to_cpu=True)
         with sm_state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
             return self.model.state_dict()
@@ -250,19 +260,68 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.full_optimizer_state_dict(optimizer)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
+    def load_local_model_state_dict(self, checkpoint):
+        pass
+
+    def load_sharded_model_state_dict(self, checkpoint):
+        assert "state_dict" in checkpoint, "Missing model 'state_dict'"
+        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
+            state_dict = checkpoint["state_dict"]
+            # XXX: This is a workaround solution bc rubik's save/load hooks are inconsistent.
+            # ref:
+            #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
+            #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
+            state_dict[f"model.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
+            state_dict[f"model.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
+            self.model.load_state_dict(checkpoint["state_dict"])
+
+    def load_full_model_state_dict(self, checkpoint):
+        assert "state_dict" in checkpoint, "Missing model 'state_dict'"
+        state_dict_config = FullStateDictConfig(rank0_only=True, offload_to_cpu=True)
+        with sm_state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
+            self.model.load_state_dict(checkpoint["state_dict"])
+
     def load_model_state_dict(self, checkpoint: Mapping[str, Any], strict=None) -> None:
-        # Release strict state dict matching when using Megatron AMP-O2 to skip matching
-        # half-precision module wrapper module.
-        # TODO: add when implementing checkpoint
-        return
+        assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
+        typ = self.checkpoint_io.checkpoint_type
+        if typ == SageMakerCheckpointType.LOCAL:
+            return self.load_local_model_state_dict(checkpoint)
+        if typ == SageMakerCheckpointType.SHARDED:
+            return self.load_sharded_model_state_dict(checkpoint)
+        if typ == SageMakerCheckpointType.FULL:
+            return self.load_full_model_state_dict(checkpoint)
+        raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
-    def load_optimizer_state_dict(self, checkpoint: Mapping[str, Any]) -> None:
-        """
-        Re-key the full optimizer state dict to sharded optimizer state dict
-        """
+    def load_sharded_optim_state_dict(self, trainer, checkpoint, path):
+        for i, optimizer in enumerate(trainer.optimizers):
+            optimizer_key = f"{OPTIMIZER_KEY_PREFIX}_{i}"
+            state_dict = load_sharded_optimizer_state_dict(
+                model_state_dict=checkpoint["state_dict"],
+                optimizer_key=optimizer_key,
+                storage_reader=DistributedFileSystemReader(path),
+            )
+            flattened_osd = FSDP.optim_state_dict_to_load(
+                model=self.model, optim=optimizer, optim_state_dict=state_dict[optimizer_key]
+            )
+            optimizer.load_state_dict(flattened_osd)
 
-        # TODO: add when implementing checkpoint
-        return
+    def load_local_optim_state_dict(self, trainer, checkpoint, path):
+        pass
+
+    def load_optimizer_state_dict(
+        self,
+        trainer,
+        checkpoint: Mapping[str, Any],
+        path,
+        **kw,
+    ) -> None:
+        assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
+        typ = self.checkpoint_io.checkpoint_type
+        if typ == SageMakerCheckpointType.LOCAL:
+            return self.load_local_optim_state_dict(trainer, checkpoint, path)
+        if typ == SageMakerCheckpointType.SHARDED:
+            return self.load_sharded_optim_state_dict(trainer, checkpoint, path)
+        raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def save_checkpoint(
         self,

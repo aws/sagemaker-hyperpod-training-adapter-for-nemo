@@ -53,7 +53,7 @@ def get_rank():
 
 
 def is_action_rank(global_rank):
-    return tsm.ranker.get_rep_rank(global_rank) == 0
+    return tsm.state.ranker.get_rep_rank(global_rank) == 0
 
 
 def get_coordinator_rank(process_group):

@@ -119,8 +119,6 @@ class BaseModelConfig(BaseModel):
     offload_activations: bool = False
     seed: int = 12345
     grad_clip: float = Field(default=1.0, ge=0)  # 0 == disabled
-    checkpoint_dir: Optional[str] = None
-    resume_from_checkpoint: Optional[str] = None
 
     # FSDP Configs
     sharding_strategy: Literal[
@@ -241,6 +239,7 @@ class BaseExpManager(BaseModel):
     checkpoint_callback_params: BaseCheckpointCallbackConfig = Field(default_factory=BaseCheckpointCallbackConfig)
     export_full_model: BaseExportFullModelConfig = Field(default_factory=BaseExportFullModelConfig)
     checkpoint_dir: Optional[str] = None
+    resume_from_checkpoint: Optional[str] = None
 
 
 class BaseInternalConfig(BaseModel):

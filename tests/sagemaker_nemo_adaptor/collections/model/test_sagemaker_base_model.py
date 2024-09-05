@@ -102,7 +102,7 @@ class TestBuildModel:
         ("version", "exp_args_len", "exp_kwargs_len"),
         [
             [transformers_below_version, 1, 0],
-            [transformers_threshold_version, 1, 2],
+            [transformers_threshold_version, 1, 1],
         ],
     )
     def test_no_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):

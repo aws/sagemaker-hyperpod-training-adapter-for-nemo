@@ -1,6 +1,7 @@
 from enum import Enum, auto, unique
 
 GPUS_PER_NODE = 8
+OPTIMIZER_KEY_PREFIX = "optimizer"
 
 
 @unique
