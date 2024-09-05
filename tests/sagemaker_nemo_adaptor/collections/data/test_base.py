@@ -83,7 +83,7 @@ class TestSkipDataLoader:
         # https://pytorch.org/docs/stable/distributed.html#tcp-initialization
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        init_process_group(backend="nccl", rank=0, world_size=1)
+        init_process_group(backend="gloo", rank=0, world_size=1)
 
         # assertions
         assert sum(bool(data) for data in sdl) == data_entry_count - resume_sequence_number
