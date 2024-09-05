@@ -10,6 +10,7 @@ import torch.distributed as dist
 from nemo.utils import logging
 from pytorch_lightning import Callback
 from torch import Tensor
+from torch.sagemaker import state
 
 from sagemaker_nemo_adaptor.constants import (
     SageMakerCheckpointType,
@@ -50,9 +51,13 @@ class SageMakerCheckpoint(Callback):
         self._checkpoint_dir = cfg.exp_manager.get("checkpoint_dir", None)
         self._resume_from_checkpoint = cfg.get("resume_from_checkpoint", None)
         # Full checkpoint
-        self._save_full_every_n_steps = cfg.exp_manager.export_full_model.get("every_n_train_steps", None)
-        checkpoint_callback_params = cfg.exp_manager.checkpoint_callback_params
+        self._save_full_every_n_steps = None
+        if "export_full_model" in cfg.exp_manager:
+            self._save_full_every_n_steps = cfg.exp_manager.export_full_model.get("every_n_train_steps", None)
         # Sharded checkpoint
+        checkpoint_callback_params = {}
+        if "checkpoint_callback_params" in cfg.exp_manager:
+            checkpoint_callback_params = cfg.exp_manager.checkpoint_callback_params
         self._save_sharded_every_n_steps = checkpoint_callback_params.get("every_n_train_steps", None)
         self._save_top_k = checkpoint_callback_params.get("save_top_k", None)
         self._monitor = checkpoint_callback_params.get("monitor", "step")
@@ -186,7 +191,7 @@ class SageMakerCheckpoint(Callback):
     ):
         """Save one checkpoint using corresponding checkpoint type."""
         checkpoint_io.checkpoint_type = checkpoint_type
-        trainer.save_checkpoint(checkpoint_dir)
+        trainer.save_checkpoint(checkpoint_dir, weights_only=checkpoint_type == SageMakerCheckpointType.FULL)
         if dist.get_rank() == 0:
             logging.info(f"Saving {checkpoint_type} Checkpoint to {checkpoint_dir}")
 
@@ -203,7 +208,7 @@ class SageMakerCheckpoint(Callback):
 
         if self._should_save_sharded(trainer, monitor_candidates):
             score = monitor_candidates.get(self._monitor)
-            sub_dir = f"sharded/{self.format_sharded_checkpoint_path(score)}/"
+            sub_dir = f"sharded/tp{state.tp_rank}_ep{state.ep_rank}/{self.format_sharded_checkpoint_path(score)}/"
             sharded_checkpoint_dir = os.path.join(self._get_checkpoint_dir(trainer), sub_dir)
             checkpoint_info.append((SageMakerCheckpointType.SHARDED, sharded_checkpoint_dir))
             new_checkpoint = TopkCheckPoint(
