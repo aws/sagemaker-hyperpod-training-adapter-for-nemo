@@ -1,6 +1,5 @@
 from typing import Any, Dict, Optional, Union
 
-import torch
 import torch.distributed as dist
 import torch.sagemaker as tsm
 import transformer_engine
@@ -114,11 +113,10 @@ class SageMakerNLPBaseModel(ModelPT):
         attn = "flash_attention_2"
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_pretrained(path, config=model_cfg)
-        # flash-attn only supports torch.float16
         return AutoModelForCausalLM.from_pretrained(
             path,
             attn_implementation=attn,
-            torch_dtype=torch.float16,
+            config=model_cfg,
         )
 
     def _build_model(self, model_cfg):
@@ -126,11 +124,9 @@ class SageMakerNLPBaseModel(ModelPT):
         attn = "flash_attention_2"
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_config(model_cfg)
-        # flash-attn only supports torch.float16
         return AutoModelForCausalLM.from_config(
             model_cfg,
             attn_implementation=attn,
-            torch_dtype=torch.float16,
         )
 
     def _training_step_fp8(self, batch, batch_idx, *a, **kw):
