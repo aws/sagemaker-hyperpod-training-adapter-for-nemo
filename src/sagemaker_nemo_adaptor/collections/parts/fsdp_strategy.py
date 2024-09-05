@@ -103,7 +103,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 use_orig_params=cfg.use_orig_param,
                 param_init_fn=param_init_fn,
                 post_param_init_fn=post_param_init_fn,
-                sync_module_states=cfg.finetune_with_pretrained_weights,
+                sync_module_states=model.do_finetune_with_pretrained_weights,
             )
 
         if cfg.activation_checkpointing:
@@ -130,7 +130,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return self._setup_non_smp_delayed_param(cfg, model)
 
     def _setup_non_smp_delayed_param(self, cfg, model):
-        if cfg.finetune_with_pretrained_weights:
+        if model.do_finetune_with_pretrained_weights:
             # Pulled param initialization function from open source meta/llama training recipes
             # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
             param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
@@ -141,7 +141,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def _setup_smp_delayed_param(self, cfg, model):
         initer = None
-        if cfg.finetune_with_pretrained_weights:
+        if model.do_finetune_with_pretrained_weights:
             if self.global_rank != 0:
                 initer = DelayedParamIniter(model.model)
         else:
@@ -152,7 +152,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return (
             initer.get_param_init_fn(),
             initer.get_post_param_init_fn(),
-            initer.validate_params_and_buffers_inited() if not cfg.finetune_with_pretrained_weights else nullcontext(),
+            initer.validate_params_and_buffers_inited()
+            if not model.do_finetune_with_pretrained_weights
+            else nullcontext(),
         )
 
     def setup(self, trainer: "pl.Trainer") -> None:

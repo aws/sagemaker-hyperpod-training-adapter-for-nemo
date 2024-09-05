@@ -42,9 +42,35 @@ class SageMakerNLPBaseModel(ModelPT):
         cls = type(self).__name__
         raise NotImplementedError(f"{cls}.get_model_config not implemented")
 
+    @property
+    def do_finetune(self):
+        """
+        Returns true if finetuning
+        """
+        return self._cfg.get("pretrained_model_name_or_path", None) is not None
+
+    @property
+    def do_finetune_with_pretrained_weights(self):
+        """
+        Returns true for start of finetuning only, meaning we don't have a checkpoint and need to load pretrained weights
+        """
+        return self.do_finetune and self._cfg.get("resume_from_checkpoint", None) is None
+
     def setup(self, *a, **kw):
-        model_cfg = self.get_model_config()
+        if self.do_finetune:
+            from transformers import AutoConfig
+
+            # Using config from the pretrained model
+            model_cfg = AutoConfig.from_pretrained(self._cfg.pretrained_model_name_or_path)
+            # Disable KV cache for HF models
+            if hasattr(model_cfg, "use_cache"):
+                model_cfg.use_cache = False
+        else:
+            model_cfg = self.get_model_config()
+
         model = self._setup_delayed_param(model_cfg)
+        if self.do_finetune_with_pretrained_weights:
+            dist.barrier()
         self.model = self._transform(model)
         self.fp8_recipe = self._fp8_delayed_scaling()
 
@@ -61,7 +87,7 @@ class SageMakerNLPBaseModel(ModelPT):
             return model
 
         moe_config = None  # TODO: Add moe support
-        load_state_dict_from_rank0 = self._cfg.finetune_with_pretrained_weights
+        load_state_dict_from_rank0 = self.do_finetune_with_pretrained_weights
         return transform(
             model,
             config=moe_config,
@@ -71,13 +97,13 @@ class SageMakerNLPBaseModel(ModelPT):
     def _setup_delayed_param(self, model_cfg):
         if not self._cfg.delayed_param:
             return self.build_model(model_cfg)
-        if self._cfg.finetune_with_pretrained_weights and dist.get_rank() == 0:
+        if self.do_finetune_with_pretrained_weights and dist.get_rank() == 0:
             return self.build_model(model_cfg)
         with init_empty_weights():
             return self.build_model(model_cfg)
 
     def build_model(self, model_cfg):
-        if self._cfg.pretrained_model_name_or_path:
+        if self.do_finetune_with_pretrained_weights and dist.get_rank() == 0:
             return self._build_model_from_pretrain(model_cfg)
         return self._build_model(model_cfg)
 

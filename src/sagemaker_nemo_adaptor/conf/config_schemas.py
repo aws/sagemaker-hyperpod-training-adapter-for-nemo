@@ -119,7 +119,6 @@ class BaseModelConfig(BaseModel):
     offload_activations: bool = False
     seed: int = 12345
     grad_clip: float = Field(default=1.0, ge=0)  # 0 == disabled
-    hf_pretrained_model: Optional[str] = None
     checkpoint_dir: Optional[str] = None
     resume_from_checkpoint: Optional[str] = None
 
@@ -159,9 +158,6 @@ class BaseModelConfig(BaseModel):
     fp8_amax_compute_algo: Literal["max", "most_recent"] = "max"
 
     # Fine-Tuning
-    do_finetune: bool = False
-    finetune_with_pretrained_weights: bool = False
-
     # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
     pretrained_model_name_or_path: Optional[str] = None
 
