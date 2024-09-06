@@ -8,7 +8,6 @@ from typing import Dict, Optional, Union
 
 from nemo.collections.common.callbacks import EMA
 from nemo.utils import logging
-from nemo.utils.app_state import AppState
 from nemo.utils.exp_manager import CallbackParams
 from nemo.utils.exp_manager import ExpManagerConfig as NeMoExpManagerConfig
 from nemo.utils.exp_manager import (
@@ -22,6 +21,7 @@ from nemo.utils.exp_manager import get_git_diff, get_git_hash, get_log_dir
 from nemo.utils.lightning_logger_patch import add_filehandlers_to_pl_logger
 from omegaconf import DictConfig, OmegaConf
 
+from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 from sagemaker_nemo_adaptor.utils.get_rank import is_global_rank_zero
 
 
@@ -119,7 +119,7 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
     cfg.version = version
 
     # update app_state with log_dir, exp_dir, etc
-    app_state = AppState()
+    app_state = SageMakerAppState()
     app_state.log_dir = log_dir
     app_state.exp_dir = exp_dir
     app_state.name = name

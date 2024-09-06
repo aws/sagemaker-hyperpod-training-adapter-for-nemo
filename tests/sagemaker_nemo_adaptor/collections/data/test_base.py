@@ -42,7 +42,7 @@ class TestBaseDataModule:
     def test_setup(self, mocker):
         # setup
         mocked_app_state = self.MockedAppState()
-        patch = mocker.patch(f"{MODULE_PATH}.AppState", return_value=mocked_app_state)
+        patch = mocker.patch(f"{MODULE_PATH}.SageMakerAppState", return_value=mocked_app_state)
         base = build_base_data_module()
 
         # action

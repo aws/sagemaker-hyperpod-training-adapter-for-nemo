@@ -2,11 +2,12 @@ from typing import Callable, Optional
 
 import torch
 import torch.distributed as dist
-from nemo.utils import AppState
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from pytorch_lightning.core.datamodule import LightningDataModule
 from torch.utils.data import DataLoader
+
+from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
 
 class BaseDataModule(LightningDataModule):
@@ -26,7 +27,7 @@ class BaseDataModule(LightningDataModule):
     def setup(self, stage=None):
         super().setup(stage)
 
-        app_state = AppState()
+        app_state = SageMakerAppState()
         self.dp_size = app_state.data_parallel_size
         self.dp_rank = app_state.data_parallel_rank
 

@@ -1,11 +1,12 @@
-from nemo.utils import AppState
 from transformers import set_seed
+
+from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
 
 def initialize_model_parallel_for_nemo(world_size, global_rank, local_rank, tensor_model_parallel_size=1, seed=None):
     # updating NeMo globals
     # TODO: Update EP,PP when applicable
-    app_state = AppState()
+    app_state = SageMakerAppState()
     app_state.global_rank = global_rank
     app_state.world_size = world_size
     app_state.local_rank = local_rank

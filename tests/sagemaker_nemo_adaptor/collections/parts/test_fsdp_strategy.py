@@ -1,8 +1,8 @@
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
-from nemo.utils import AppState
 from pytorch_lightning import Trainer
 
 from sagemaker_nemo_adaptor.collections.parts.fsdp_strategy import SageMakerFSDPStrategy
+from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 from tests.fixtures.adaptor_config import full_config  # noqa F401
 
 MODULE_PATH = "sagemaker_nemo_adaptor.collections.parts.fsdp_strategy"
@@ -74,7 +74,7 @@ def test_setup_environment(mocker, full_config):
     grandparent_setup_mock.assert_called_once()
     tsm_mock.init.assert_called_once()
 
-    app_state = AppState()
+    app_state = SageMakerAppState()
     assert app_state.world_size == world_size
     assert app_state.global_rank == global_rank
     assert app_state.local_rank == local_rank

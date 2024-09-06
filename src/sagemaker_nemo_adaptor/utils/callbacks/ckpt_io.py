@@ -41,8 +41,9 @@ class SageMakerCheckpointIO(CheckpointIO):
         typ = self._checkpoint_type
         if typ not in self._checkpoint_io:
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
-        logging.info(f"save_checkpoint: {path}")
-        if "optimizer_states" in checkpoint:
+        logging.info(f"save {self._checkpoint_type} checkpoint: {path}")
+        # Only sharded checkpointing needs unique optimizer key
+        if "optimizer_states" in checkpoint and self._checkpoint_type == SageMakerCheckpointType.SHARDED:
             optimizers = checkpoint.pop("optimizer_states")
             for i, optim in enumerate(optimizers):
                 checkpoint[f"{OPTIMIZER_KEY_PREFIX}_{i}"] = optim

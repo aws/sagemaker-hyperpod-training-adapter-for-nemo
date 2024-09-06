@@ -33,6 +33,7 @@ from sagemaker_nemo_adaptor.constants import (
     OPTIMIZER_KEY_PREFIX,
     SageMakerCheckpointType,
 )
+from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import SageMakerCheckpointIO
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
 from sagemaker_nemo_adaptor.utils.fsdp_utils import (
@@ -72,6 +73,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.cfg = cfg
         self.use_smp = cfg.use_smp
         self.smp_config_dict = self._setup_smp_config(cfg)
+        self.app_state = SageMakerAppState()
 
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
@@ -87,6 +89,22 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         if cfg.model.shard_degree:
             smp_config["hybrid_shard_degree"] = cfg.model.shard_degree
         return smp_config
+
+    def _record_fsdp_process_group(self, model: FSDP):
+        """
+        Put fsdp model process group info into app state.
+        """
+        self.app_state.fsdp_process_group = model.process_group
+        self.app_state.is_fsdp_action_rank = is_action_rank(self.global_rank)
+        self.app_state.fsdp_coordinator_rank = get_coordinator_rank(model.process_group)
+
+    def _record_replication_process_group(self):
+        """
+        Put replication group info into app state.
+        """
+        (replication_coordinator_rank, current_replication_group) = get_current_replication_group(self.global_rank)
+        self.app_state.replication_coordinator_rank = replication_coordinator_rank
+        self.app_state.current_replication_group = current_replication_group
 
     def _setup_model(self, model):
         use_smp = self.use_smp
@@ -116,6 +134,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 post_param_init_fn=post_param_init_fn,
                 sync_module_states=model.do_finetune_with_pretrained_weights,
             )
+            self._record_fsdp_process_group(model)
+            self._record_replication_process_group()
 
         if cfg.activation_checkpointing:
             apply_activation_checkpoint(

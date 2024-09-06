@@ -70,4 +70,4 @@ def get_current_replication_group(global_rank):
             replication_ranks = ranks
     assert replication_group, f"{global_rank} Replication group not found"
     assert replication_ranks, f"{global_rank} Replication ranks not found"
-    return replication_ranks, replication_group
+    return min(replication_ranks), replication_group
