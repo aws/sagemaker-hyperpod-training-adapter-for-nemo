@@ -10,6 +10,7 @@ from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
 from sagemaker_nemo_adaptor.utils.config_utils import validate_config
 from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
+from sagemaker_nemo_adaptor.utils.sm_utils import setup_args_for_sm
 
 
 def train(cfg: DictConfig) -> None:
@@ -28,4 +29,5 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+    setup_args_for_sm()
     main()
