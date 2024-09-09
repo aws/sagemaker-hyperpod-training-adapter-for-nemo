@@ -26,6 +26,7 @@ exp_manager:
     mode: "max"
   checkpoint_dir: ${exp_manager.exp_dir}/checkpoints/
   resume_from_checkpoint: null
+  auto_checkpoint: True
   export_full_model:
     every_n_train_steps: 10
 

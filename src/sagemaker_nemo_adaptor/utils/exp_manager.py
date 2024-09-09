@@ -36,6 +36,7 @@ class ExpManagerConfig(NeMoExpManagerConfig):
     log_reduced_training_loss: Optional[bool] = True
     export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
     checkpoint_dir: Optional[str] = None
+    auto_checkpoint: Optional[bool] = False
 
 
 def error_checks(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None):

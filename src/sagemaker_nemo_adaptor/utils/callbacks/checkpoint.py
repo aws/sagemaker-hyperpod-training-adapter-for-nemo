@@ -1,7 +1,7 @@
 import os
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -27,28 +27,160 @@ class TopkCheckPoint:
     epoch_at_save: int = 0
 
 
-class SageMakerCheckpoint(Callback):
-    def __init__(
+class SageMakerModelCheckpointBase(Callback):
+    """
+    Base class for SageMakerModelCheckpoint callback.
+    """
+
+    def __init__(self, checkpoint_dir: Optional[str] = None, *args, **kw):
+        super().__init__(*args, **kw)
+        self._checkpoint_dir = checkpoint_dir
+        self._app_state = SageMakerAppState()
+
+    def on_train_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        checkpoint_io.teardown(trainer)
+
+    def on_train_batch_end(
         self,
-        cfg,
-        *a,
-        **kw,
+        trainer: "pl.Trainer",
+        *args,
+        **kwargs,
+    ) -> None:
+        self._save_checkpoints(trainer)
+
+    @property
+    def checkpoint_dir(self):
+        if not self._checkpoint_dir:
+            path = os.path.join(self.app_state.exp_dir, "checkpoints")
+            self._checkpoint_dir = path
+        return self._checkpoint_dir
+
+    def _load_checkpoint(self, trainer, path, typ):
+        """
+        Load checkpoint from a given path with the given checkpoint type.
+        """
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        checkpoint_io.checkpoint_type = typ
+        state_dict = trainer.strategy.load_checkpoint(path, trainer)
+        logging.debug(state_dict)
+        trainer.strategy.load_model_state_dict(state_dict)
+        trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
+        # TODO(htzhong): add the data module loading here.
+
+    def _save(
+        self,
+        trainer: "pl.Trainer",
+        checkpoint_io: SageMakerCheckpointIO,
+        checkpoint_type: SageMakerCheckpointType,
+        checkpoint_dir: str,
     ):
+        """Save one checkpoint using corresponding checkpoint type."""
+        checkpoint_io.checkpoint_type = checkpoint_type
+        weights_only = checkpoint_type == SageMakerCheckpointType.FULL
+        trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
+
+
+class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
+    """
+    This callback is used to enable resilience feature which automatically save local checkpoint
+    asynchronously with a background process.
+
+    Note: The saved checkpiont is a local checkpoint type which ONLY contains the local model/optimizer
+    weights in a given shard. Therefore, it requires the same hybrid shard degree if enable_auto_reload
+    is set to True.
+
+    every_n_train_steps attributes will be automatically updated.
+
+    A checkpoint will be saved to: /checkpoint_dir/local/steps_{i}/tp{j}_ep{k}_fsdp{l}/
+
+    Usage:
+    trainer = Trainer(
+        strategy,
+        max_steps,
+        plugins=[SageMakerCheckpointIO()],
+        callbacks=[SageMakerModelCheckpointResilience(checkpoint_dir, True)],
+    )
+    """
+
+    def __init__(self, enable_auto_reload: bool, checkpoint_dir: Optional[str] = None, *args, **kw):
+        super().__init__(checkpoint_dir, *args, **kw)
+        self._enable_auto_reload = enable_auto_reload
+        # TODO: Update the "every_n_train_steps"
+        self._every_n_train_steps = 1
+
+    def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """
-        SageMakerCheckpoint Supports three types of checkpointing at each train batch. Potentially together:
-        1. Full:
-            This is configured to be saved every n train steps into exp_manager.export_full_model.
-            ONLY model weights will be saved on rank 0.
-            Note that selecting Full could be slow.
-        2. Sharded:
-            Save every n train steps in distributed checkpointing manner if save_top_k, monitor, mode and
-            every_n_train_steps are provided in exp_manager.checkpoint_callback_params.
-        3. Local:
-            This is primarily used to do checkpoint resilience.
+        Resuming from local checkpoints until it succeeds.
         """
-        super().__init__(*a, **kw)
-        self.app_state = SageMakerAppState()
-        self._checkpoint_dir = cfg.exp_manager.get("checkpoint_dir", None)
+        if self._enable_auto_reload:
+            for saved_checkpoint_dir in self.saved_checkpoint_dirs:
+                try:
+                    logging.info(f"loading local checkpoint: {saved_checkpoint_dir}")
+                    typ = SageMakerCheckpointType.LOCAL
+                    path = os.path.join(saved_checkpoint_dir, self.local_checkpoint_sub_dir(trainer))
+                    self._load_checkpoint(trainer, path, typ)
+                    break
+                except:
+                    pass
+
+    def local_checkpoint_sub_dir(self, trainer):
+        tp_rank = f"tp{state.tp_rank}"
+        ep_rank = f"ep{state.ep_rank}"
+        fsdp_rank = f"fsdp{trainer.strategy.model.rank}"
+        return "_".join([tp_rank, ep_rank, fsdp_rank])
+
+    @property
+    def saved_checkpoint_dirs(self):
+        """
+        Retreive all saved local checkpoint directories.
+        """
+        local_checkpoint_dir = os.path.join(self.checkpoint_dir, "local")
+        saved_checkpoints = []
+        if os.path.isdir(local_checkpoint_dir):
+            saved_checkpoints = os.scandir(local_checkpoint_dir)
+        return saved_checkpoints
+
+    def _should_save_local(self, trainer: "pl.Trainer"):
+        # TODO: check when should save local checkpoints for resilience
+        is_last_step = trainer.max_steps == trainer.global_step
+        is_every_n = trainer.global_step % self._every_n_train_steps == 0
+        return is_last_step or is_every_n
+
+    def _save_checkpoints(self, trainer: "pl.Trainer"):
+        """
+        Save local checkpiont if it should.
+        """
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+
+        if not self._should_save_local(trainer):
+            return
+
+        local_sub_dir = self.local_checkpoint_sub_dir(trainer)
+        local_checkpoint_dir = os.path.join(self.checkpoint_dir, "local", f"steps_{trainer.global_step}", local_sub_dir)
+        self._save(
+            trainer, checkpoint_io, checkpoint_type=SageMakerCheckpointType.LOCAL, checkpoint_dir=local_checkpoint_dir
+        )
+
+
+class SageMakerCheckpoint(SageMakerModelCheckpointBase):
+    """
+    SageMakerCheckpoint Supports three types of checkpointing at each train batch. Potentially together:
+    1. Full:
+        This is configured to be saved every n train steps into exp_manager.export_full_model.
+        ONLY model weights will be saved on rank 0.
+        Note that selecting Full could be slow.
+    2. Sharded:
+        Save every n train steps in distributed checkpointing manner if save_top_k, monitor, mode and
+        every_n_train_steps are provided in exp_manager.checkpoint_callback_params.
+    """
+
+    def __init__(self, cfg, *args, **kw):
+        checkpoint_dir = cfg.exp_manager.get("checkpoint_dir", None)
+        super().__init__(checkpoint_dir, *args, **kw)
         self._resume_from_checkpoint = cfg.exp_manager.get("resume_from_checkpoint", None)
         # Full checkpoint
         self._save_full_every_n_steps = None
@@ -73,44 +205,12 @@ class SageMakerCheckpoint(Callback):
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if self._resume_from_checkpoint:
-            try:
-                logging.info(f"load sharded checkpoint: {self._resume_from_checkpoint}")
-                typ = SageMakerCheckpointType.SHARDED
-                path = self._resume_from_checkpoint
-                sub_dir = f"tp{state.tp_rank}_ep{state.ep_rank}"
-                sharded_checkpoint_dir = os.path.join(path, sub_dir)
-                self._load_checkpoint(trainer, sharded_checkpoint_dir, typ)
-            except:
-                # TODO(htzhong): Remove this try/catch once callback is splitted.
-                logging.info(f"load local checkpoint: {self._resume_from_checkpoint}")
-                typ = SageMakerCheckpointType.LOCAL
-                subdir = self._format_local_checkpoint_sub_dir(self._resume_from_checkpoint, trainer)
-                path = os.path.join(path, subdir)
-                self._load_checkpoint(trainer, path, typ)
-
-    def on_train_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
-        checkpoint_io = trainer.strategy.checkpoint_io
-        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
-        checkpoint_io.teardown(trainer)
-
-    def on_train_batch_end(
-        self,
-        trainer: "pl.Trainer",
-        *args,
-        **kwargs,
-    ) -> None:
-        self._save_checkpoints(trainer)
-
-    def _get_checkpoint_dir(self, trainer):
-        if not self._checkpoint_dir:
-            path = os.path.join(self.app_state.exp_dir, "checkpoints")
-            self._checkpoint_dir = path
-        return self._checkpoint_dir
-
-    def _should_save_local(self, trainer: "pl.Trainer"):
-        # TODO: check when should save local checkpoints for resilience
-        is_last_step = trainer.max_steps == trainer.global_step
-        return is_last_step
+            logging.info(f"loading sharded checkpoint: {self._resume_from_checkpoint}")
+            typ = SageMakerCheckpointType.SHARDED
+            path = self._resume_from_checkpoint
+            sub_dir = f"tp{state.tp_rank}_ep{state.ep_rank}"
+            sharded_checkpoint_dir = os.path.join(path, sub_dir)
+            self._load_checkpoint(trainer, sharded_checkpoint_dir, typ)
 
     def _should_save_full(self, trainer: "pl.Trainer"):
         """
@@ -204,27 +304,6 @@ class SageMakerCheckpoint(Callback):
         save_dir = save_dir.format(monitor=self._monitor, value=score)
         return save_dir
 
-    def _save(
-        self,
-        trainer: "pl.Trainer",
-        checkpoint_io: SageMakerCheckpointIO,
-        checkpoint_type: SageMakerCheckpointType,
-        checkpoint_dir: str,
-    ):
-        """Save one checkpoint using corresponding checkpoint type."""
-        checkpoint_io.checkpoint_type = checkpoint_type
-        weights_only = checkpoint_type == SageMakerCheckpointType.FULL
-        trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
-
-    def _format_local_checkpoint_sub_dir(self, path, trainer):
-        sub_dir = f"tp{state.tp_rank}_" f"ep{state.ep_rank}_fsdp{trainer.strategy.model.rank}/"
-        return sub_dir
-
-    def _save_local(self, trainer: "pl.Trainer", path):
-        local_sub_dir = self._format_local_checkpoint_sub_dir(path, trainer)
-        local_checkpoint_dir = os.path.join(path, f"local/steps_{trainer.global_step}", local_sub_dir)
-        return SageMakerCheckpointType.LOCAL, local_checkpoint_dir
-
     def _save_full(self, trainer: "pl.Trainer", path):
         path = os.path.join(path, "full", f"steps_{trainer.global_step}")
         return SageMakerCheckpointType.FULL, path
@@ -252,23 +331,13 @@ class SageMakerCheckpoint(Callback):
         checkpoint_io = trainer.strategy.checkpoint_io
         assert isinstance(checkpoint_io, SageMakerCheckpointIO)
         checkpoint_info = []
-        checkpoint_dir = self._get_checkpoint_dir(trainer)
+        checkpoint_dir = self.checkpoint_dir
         monitor_candidates = self._monitor_candidates(trainer)
 
-        if self._should_save_local(trainer):
-            checkpoint_info.append(self._save_local(trainer, checkpoint_dir))
         if self._should_save_sharded(trainer, monitor_candidates):
             checkpoint_info.append(self._save_sharded(trainer, checkpoint_dir, monitor_candidates))
         if self._should_save_full(trainer):
             checkpoint_info.append(self._save_full(trainer, checkpoint_dir))
+
         for checkpoint_type, checkpoint_dir in checkpoint_info:
             self._save(trainer, checkpoint_io, checkpoint_type, checkpoint_dir)
-
-    def _load_checkpoint(self, trainer, path, typ):
-        checkpoint_io = trainer.strategy.checkpoint_io
-        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
-        checkpoint_io.checkpoint_type = typ
-        state_dict = trainer.strategy.load_checkpoint(path, trainer)
-        logging.debug(state_dict)
-        trainer.strategy.load_model_state_dict(state_dict)
-        trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)

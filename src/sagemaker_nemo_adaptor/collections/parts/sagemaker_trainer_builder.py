@@ -16,7 +16,6 @@ import logging
 import sys
 from typing import Union
 
-from lightning_fabric.plugins import CheckpointIO
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 
@@ -29,10 +28,17 @@ from sagemaker_nemo_adaptor.collections.parts import (
     SageMakerDDPStrategy,
     SageMakerFSDPStrategy,
 )
-from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import (
-    SageMakerCheckpoint,
-    SageMakerCheckpointIO,
-)
+
+try:
+    from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import (
+        SageMakerCheckpoint,
+        SageMakerCheckpointIO,
+        SageMakerModelCheckpointResilience,
+    )
+
+    SUPPORT_CHECKPOINT = True
+except:
+    SUPPORT_CHECKPOINT = False
 
 
 def _disable_flash_attn_info_log():
@@ -74,17 +80,33 @@ class SageMakerTrainerBuilder:
         else:
             return SageMakerDDPStrategy(self.cfg)
 
-    def _create_checkpoin_io(self) -> CheckpointIO:
-        return SageMakerCheckpointIO()
-
     def _create_plugins(self) -> list:
-        plugins = [self._create_checkpoin_io()]
+        plugins = []
+        use_resilience_ckpt = self.cfg.exp_manager.get("auto_checkpoint", False)
+        use_generic_ckpt = self.cfg.exp_manager.get("checkpoint_callback_params", None)
+
+        if SUPPORT_CHECKPOINT and (use_resilience_ckpt or use_generic_ckpt):
+            plugins.append(SageMakerCheckpointIO())
         return plugins
 
     def _create_callbacks(self, callbacks=None) -> list:
         assert callbacks is None or isinstance(callbacks, list)
         callbacks = callbacks if callbacks else []
-        callbacks.append(SageMakerCheckpoint(self.cfg))
+
+        if SUPPORT_CHECKPOINT:
+            exp_manager = self.cfg.exp_manager
+            # Resilience checkpointing callback.
+            if exp_manager.auto_checkpoint:
+                # If user specify a path to resume, disable auto resume.
+                enabled_auto_reload = exp_manager.resume_from_checkpoint == None
+                callbacks.append(
+                    SageMakerModelCheckpointResilience(
+                        enable_auto_reload=enabled_auto_reload, checkpoint_dir=exp_manager.get("checkpoint_dir", None)
+                    )
+                )
+            # Generic checkpointing callback.
+            if exp_manager.get("checkpoint_callback_params", None):
+                callbacks.append(SageMakerCheckpoint(self.cfg))
         return callbacks
 
     def _create_data_module(self, trainer):

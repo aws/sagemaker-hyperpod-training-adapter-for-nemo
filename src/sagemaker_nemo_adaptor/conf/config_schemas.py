@@ -240,6 +240,7 @@ class BaseExpManager(BaseModel):
     export_full_model: BaseExportFullModelConfig = Field(default_factory=BaseExportFullModelConfig)
     checkpoint_dir: Optional[str] = None
     resume_from_checkpoint: Optional[str] = None
+    auto_checkpoint: Optional[bool] = False
 
 
 class BaseInternalConfig(BaseModel):
