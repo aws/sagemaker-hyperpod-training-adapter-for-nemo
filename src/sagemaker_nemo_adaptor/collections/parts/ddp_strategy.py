@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
 import torch
-import torch.sagemaker as tsm
 from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from omegaconf.dictconfig import DictConfig
 
@@ -74,7 +73,11 @@ class SageMakerDDPStrategy(NLPDDPStrategy):
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPDDPStrategy, self).setup_environment()
 
-        tsm.init(self.smp_config_dict)
+        # Initialize smp, todo: check whether we still need this for HF case
+        if self.use_smp:
+            import torch.sagemaker as tsm
+
+            tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         initialize_model_parallel_for_nemo(

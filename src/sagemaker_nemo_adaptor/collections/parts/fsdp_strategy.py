@@ -193,7 +193,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         logging.info(f"Training Model:\n{self.model}")
 
     def optimizer_step(self, *a, **kw):
-        grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
+        if self.use_smp:
+            grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
         logging.debug(f"grad_norm: {grad_norm}")
         super().optimizer_step(*a, **kw)
 
@@ -204,7 +205,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).setup_environment()
 
-        tsm.init(self.smp_config_dict)
+        if self.use_smp:
+            tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         tensor_parallel_degree = self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1
@@ -237,7 +239,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         Store the model state dict in one of full, sharded or local format.
         """
         assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
-        typ = self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options)
+        typ = self.checkpoint_io.checkpoint_type
         if typ == SageMakerCheckpointType.LOCAL:
             return self.local_model_state_dict
         if typ == SageMakerCheckpointType.SHARDED:
