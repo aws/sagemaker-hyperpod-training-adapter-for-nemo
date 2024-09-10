@@ -82,8 +82,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         smp_config = {
             "activation_loading_horizon": cfg.model.activation_loading_horizon,
             "sm_activation_offloading": cfg.model.offload_activations > 0,
-            "tensor_parallel_degree": cfg.model.tensor_model_parallel_degree,
-            "expert_parallel_degree": cfg.model.expert_model_parallel_degree,
+            # these parallel degrees are defined only when `use_smp=True`.
+            # defaulting to 1 for case when `use_smp=False`:
+            # https://tiny.amazon.com/ikqkw3kr/githawsprivblob1bf5srcsage
+            "tensor_parallel_degree": cfg.model.get("tensor_model_parallel_degree", 1),
+            "expert_parallel_degree": cfg.model.get("expert_model_parallel_degree", 1),
             "random_seed": cfg.model.seed,
         }
         if cfg.model.shard_degree:
