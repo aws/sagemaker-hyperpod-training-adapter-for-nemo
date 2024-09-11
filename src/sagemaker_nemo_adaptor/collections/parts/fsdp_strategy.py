@@ -169,8 +169,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
             param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
         else:
-            # TODO (rnadimp) add a proper param init funct for non-smp case
-            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+            param_init_fn = self.model.param_init_fn
         return param_init_fn, None, nullcontext()
 
     def _setup_smp_delayed_param(self, cfg, model):
@@ -196,8 +195,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         logging.info(f"Training Model:\n{self.model}")
 
     def optimizer_step(self, *a, **kw):
-        if self.use_smp:
-            grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
+        grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
         logging.debug(f"grad_norm: {grad_norm}")
         super().optimizer_step(*a, **kw)
 
@@ -208,8 +206,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).setup_environment()
 
-        if self.use_smp:
-            tsm.init(self.smp_config_dict)
+        tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         tensor_parallel_degree = self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1

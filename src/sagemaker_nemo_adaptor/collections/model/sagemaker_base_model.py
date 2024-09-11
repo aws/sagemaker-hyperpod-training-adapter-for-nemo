@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional, Union
 
+import torch
 import torch.distributed as dist
 import torch.sagemaker as tsm
 import transformer_engine
@@ -66,12 +67,17 @@ class SageMakerNLPBaseModel(ModelPT):
                 model_cfg.use_cache = False
         else:
             model_cfg = self.get_model_config()
-
         model = self._setup_delayed_param(model_cfg)
         if self.do_finetune_with_pretrained_weights:
             dist.barrier()
         self.model = self._transform(model)
         self.fp8_recipe = self._fp8_delayed_scaling()
+
+    def param_init_fn(self, module):
+        _logger.warning(
+            f"A _param_init_fn has not been implemented for the current model class. Proceeding to train with delayed_param={self._cfg.delayed_param} will lead to convergence issues."
+        )
+        return module.to_empty(device=torch.device("cuda"), recurse=False)
 
     def _fp8_delayed_scaling(self):
         if self.use_smp and self._cfg.fp8:

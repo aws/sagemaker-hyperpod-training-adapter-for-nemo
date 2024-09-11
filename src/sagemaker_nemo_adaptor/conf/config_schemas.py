@@ -131,7 +131,7 @@ class BaseModelConfig(BaseModel):
         "size_based_auto_wrap_policy", "transformer_auto_wrap_policy"
     ] = "transformer_auto_wrap_policy"
     limit_all_gathers: bool = True
-    use_orig_param: bool = False
+    use_orig_param: bool = True
 
     # Model Architecture
     max_context_width: int = Field(default=4096, ge=1)
