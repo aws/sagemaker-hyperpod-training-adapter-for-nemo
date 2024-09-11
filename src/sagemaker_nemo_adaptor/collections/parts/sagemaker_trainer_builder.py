@@ -80,13 +80,22 @@ class SageMakerTrainerBuilder:
         else:
             return SageMakerDDPStrategy(self.cfg)
 
+    @property
+    def use_generic_checkpiont(self):
+        export_sharded = self.cfg.exp_manager.checkpoint_callback_params.get("save_top_k", 0) != 0
+        export_full = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0
+        return export_sharded or export_full
+
+    @property
+    def use_resilience_checkpoint(self):
+        return self.cfg.exp_manager.get("auto_checkpoint", False)
+
     def _create_plugins(self) -> list:
         plugins = []
-        use_resilience_ckpt = self.cfg.exp_manager.get("auto_checkpoint", False)
-        use_generic_ckpt = self.cfg.exp_manager.get("checkpoint_callback_params", None)
 
-        if SUPPORT_CHECKPOINT and (use_resilience_ckpt or use_generic_ckpt):
+        if SUPPORT_CHECKPOINT and (self.use_resilience_checkpoint or self.use_generic_checkpiont):
             plugins.append(SageMakerCheckpointIO())
+
         return plugins
 
     def _create_callbacks(self, callbacks=None) -> list:
@@ -96,7 +105,7 @@ class SageMakerTrainerBuilder:
         if SUPPORT_CHECKPOINT:
             exp_manager = self.cfg.exp_manager
             # Resilience checkpointing callback.
-            if exp_manager.auto_checkpoint:
+            if self.use_resilience_checkpoint:
                 # If user specify a path to resume, disable auto resume.
                 enabled_auto_reload = exp_manager.resume_from_checkpoint == None
                 callbacks.append(
@@ -105,7 +114,7 @@ class SageMakerTrainerBuilder:
                     )
                 )
             # Generic checkpointing callback.
-            if exp_manager.get("checkpoint_callback_params", None):
+            if self.use_generic_checkpiont:
                 callbacks.append(SageMakerCheckpoint(self.cfg))
         return callbacks
 
@@ -128,6 +137,8 @@ class SageMakerTrainerBuilder:
             logger=False,  # Logger will be configured in exp_manager, set to false here to prevent conflict
             plugins=plugins,
             callbacks=callbacks,
+            # Disable deafult lightning ModelCheckpoint if none of them are used.
+            enable_checkpointing=self.use_generic_checkpiont or self.use_resilience_checkpoint,
         )
 
         data_module = self._create_data_module(trainer)

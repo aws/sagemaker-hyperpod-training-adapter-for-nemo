@@ -6,7 +6,7 @@ from typing import Dict, Optional, Union
 import pytorch_lightning as pl
 import torch
 from nemo.utils import logging
-from pytorch_lightning import Callback
+from pytorch_lightning.callbacks import Checkpoint
 from torch import Tensor
 from torch.sagemaker import state
 
@@ -27,7 +27,7 @@ class TopkCheckPoint:
     epoch_at_save: int = 0
 
 
-class SageMakerModelCheckpointBase(Callback):
+class SageMakerModelCheckpointBase(Checkpoint):
     """
     Base class for SageMakerModelCheckpoint callback.
     """
@@ -53,7 +53,7 @@ class SageMakerModelCheckpointBase(Callback):
     @property
     def checkpoint_dir(self):
         if not self._checkpoint_dir:
-            path = os.path.join(self.app_state.exp_dir, "checkpoints")
+            path = os.path.join(self._app_state.exp_dir, "checkpoints")
             self._checkpoint_dir = path
         return self._checkpoint_dir
 
