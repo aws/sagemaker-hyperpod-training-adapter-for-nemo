@@ -3,7 +3,6 @@ WIP data module for megatron data pipelining, TODO: test/refine it when implemen
 """
 
 
-import torch
 from nemo.collections.nlp.data.language_modeling.megatron.base_dataset_utils import (
     get_datasets_weights_and_num_samples,
 )
@@ -17,7 +16,7 @@ from nemo.collections.nlp.data.language_modeling.megatron.megatron_batch_sampler
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
 from nemo.utils import logging
 
-from sagemaker_nemo_adaptor.collections.data import BaseDataModule
+from sagemaker_nemo_adaptor.collections.data import BaseDataModule, SkipDataLoader
 from sagemaker_nemo_adaptor.collections.data.datasets import (
     build_train_valid_test_datasets,
 )
@@ -164,7 +163,7 @@ class MegatronDataModule(BaseDataModule):
         else:
             raise ValueError('cfg.model.data.dataloader_type not found. Must be "single" or "cyclic"')
 
-        return torch.utils.data.DataLoader(
+        return SkipDataLoader(
             dataset,
             batch_sampler=batch_sampler,
             num_workers=self.cfg.model.data.num_workers,
@@ -309,7 +308,7 @@ class MegatronDataModule(BaseDataModule):
             drop_last=True,
             pad_samples_to_global_batch_size=False,
         )
-        return torch.utils.data.DataLoader(
+        return SkipDataLoader(
             dataset,
             batch_sampler=batch_sampler,
             collate_fn=collate_fn,

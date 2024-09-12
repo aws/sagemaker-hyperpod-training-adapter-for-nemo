@@ -48,6 +48,7 @@ class SageMakerLocalCheckpointIO(CheckpointIO):
             coordinator_rank=self.app_state.replication_coordinator_rank,
             storage_reader=DistributedFileSystemReader(path),
         )
+        trainer.datamodule.load_state_dict(state_dict)
         if dist.get_rank() == 0:
             logging.info(f"Loaded Local checkpoint")
 

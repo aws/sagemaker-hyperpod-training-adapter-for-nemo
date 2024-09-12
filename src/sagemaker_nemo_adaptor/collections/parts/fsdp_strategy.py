@@ -287,12 +287,13 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         assert "state_dict" in checkpoint, "Missing model 'state_dict'"
         with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
             state_dict = checkpoint["state_dict"]
-            # XXX: This is a workaround solution bc rubik's save/load hooks are inconsistent.
-            # ref:
-            #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
-            #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
-            state_dict[f"model.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
-            state_dict[f"model.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
+            if self.cfg.model.get("tensor_model_parallel_degree", 1) > 1:
+                # XXX: This is a workaround solution bc rubik's save/load hooks are inconsistent.
+                # ref:
+                #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
+                #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
+                state_dict[f"model.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
+                state_dict[f"model.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
             self.model.load_state_dict(checkpoint["state_dict"])
 
     def load_full_model_state_dict(self, checkpoint):

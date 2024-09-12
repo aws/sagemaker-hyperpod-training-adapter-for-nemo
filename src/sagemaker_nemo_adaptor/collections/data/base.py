@@ -1,12 +1,13 @@
 from typing import Callable, Optional
 
 import torch
-import torch.distributed as dist
+from nemo.utils import logging
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from pytorch_lightning.core.datamodule import LightningDataModule
 from torch.utils.data import DataLoader
 
+from sagemaker_nemo_adaptor.constants import TRAIN_SEQUENCE_NUMBER, VAL_SEQUENCE_NUMBER
 from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
 
@@ -31,22 +32,14 @@ class BaseDataModule(LightningDataModule):
         self.dp_size = app_state.data_parallel_size
         self.dp_rank = app_state.data_parallel_rank
 
-        # TODO: implement checkpoint save/load
-        # resume_checkpoint_path = self.trainer._checkpoint_connector.resume_from_checkpoint_fit_path
-        # self.init_consumed_samples = (
-        #     self._extract_consumed_samples_from_ckpt(resume_checkpoint_path) if resume_checkpoint_path else 0
-        # )
-
     def _build_dataloader(
         self,
         dataset,
-        resume_from_sequence_number=0,
         num_workers=0,
         shuffle=False,
     ):
         """
         Build sampler and dataloader
-        TODO: resume_from_sequence_number is related to checkpoint save/load, revisit when implement
         TODO: These arguments should be configurable through recipe, could be configured in datamodule/recipe checker
         """
         # TODO: set sampler.epoch to correctly shuffle across epochs, else same order will be used for
@@ -69,19 +62,64 @@ class BaseDataModule(LightningDataModule):
             "drop_last": True,
         }
 
-        if resume_from_sequence_number > 0:
-            dataloader = SkipDataLoader(dataset, resume_from_sequence_number=resume_from_sequence_number, **kwargs)
+        return SkipDataLoader(dataset, **kwargs)
+
+    def _retrieve_squence_index(self, dataloaders):
+        """Given a (list) dataloader, retrieve the current sequence number from it."""
+        if isinstance(dataloaders, list):
+            sequence_nums = [d.cur_seq_index for d in dataloaders]
         else:
-            dataloader = torch.utils.data.DataLoader(dataset, **kwargs)
-        return dataloader
+            sequence_nums = [dataloaders.cur_seq_index]
+        return sequence_nums
 
-    def compute_consumed_samples(self, steps_since_resume=0):
-        # TODO: implement checkpoint save/load
-        pass
+    def state_dict(self):
+        """Generate state_dict to save during checkpoint."""
+        state_dict = {}
+        if self.trainer.train_dataloader:
+            state_dict[TRAIN_SEQUENCE_NUMBER] = self._retrieve_squence_index(self.trainer.train_dataloader)
 
-    def _extract_consumed_samples_from_ckpt(self, ckpt_path):
-        # TODO: implement checkpoint save/load
-        pass
+        if self.trainer.val_dataloaders:
+            state_dict[VAL_SEQUENCE_NUMBER] = self._retrieve_squence_index(self.trainer.val_dataloaders)
+        return state_dict
+
+    def _resume_squence_index(self, sequence_nums, dataloaders):
+        """
+        Given a (list) dataloader and sequence_nums, set the resume_from_sequence_number in
+        the dataloader so that it will skip the batches.
+        """
+        if isinstance(dataloaders, list):
+            assert len(sequence_nums) == len(dataloaders), (
+                f"sequence_nums length " f"{len(sequence_nums)} is not equal to dataloaders length {len(dataloaders)}"
+            )
+            for i in range(len(dataloaders)):
+                dataloaders[i].resume_from_sequence_number = sequence_nums[i]
+        else:
+            assert (
+                len(sequence_nums) == 1
+            ), f"Only have one dataloader but sequence_nums has lenght of {len(sequence_nums)}"
+            dataloaders.resume_from_sequence_number = sequence_nums[0]
+
+    def load_state_dict(self, state_dict):
+        """
+        Load the state_dict into dataloaders if they exist.
+        """
+        assert self.__class__.__qualname__ in state_dict, f"{self.__class__.__qualname__} is not in state_dict"
+
+        if self.trainer.train_dataloader:
+            assert (
+                TRAIN_SEQUENCE_NUMBER in state_dict[self.__class__.__qualname__]
+            ), f"Could not find {TRAIN_SEQUENCE_NUMBER} is not in state_dict[{self.__class__.__qualname__}]"
+            self._resume_squence_index(
+                state_dict[self.__class__.__qualname__][TRAIN_SEQUENCE_NUMBER], self.trainer.train_dataloader
+            )
+
+        if self.trainer.val_dataloaders:
+            assert (
+                VAL_SEQUENCE_NUMBER in state_dict[self.__class__.__qualname__]
+            ), f"Could not find {VAL_SEQUENCE_NUMBER} is not in state_dict[{self.__class__.__qualname__}]"
+            self._resume_squence_index(
+                state_dict[self.__class__.__qualname__][VAL_SEQUENCE_NUMBER], self.trainer.val_dataloaders
+            )
 
     def get_batch(self, data):
         """
@@ -114,7 +152,7 @@ class SkipDataLoader(DataLoader):
     Args:
         dataset (`torch.utils.data.dataset.Dataset`):
             The dataset to use to build this datalaoder.
-        skip_batches (`int`, *optional*, defaults to 0):
+        resume_from_sequence_number (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
@@ -122,19 +160,25 @@ class SkipDataLoader(DataLoader):
 
     def __init__(self, *args, resume_from_sequence_number=0, **kwargs):
         super().__init__(*args, **kwargs)
-        self.resume_from_sequence_number = resume_from_sequence_number
+        self._resume_from_sequence_number = resume_from_sequence_number
         self.cur_seq_index = 0
+
+    @property
+    def resume_from_sequence_number(self):
+        return self._resume_from_sequence_number
+
+    @resume_from_sequence_number.setter
+    def resume_from_sequence_number(self, sequence_number):
+        self._resume_from_sequence_number = sequence_number
 
     def __iter__(self):
         for batch in super().__iter__():
             num_seq = int(self.batch_size)
-
-            if self.cur_seq_index + num_seq > self.resume_from_sequence_number % (len(self) * self.batch_size):
-                yield batch
-            else:
-                if dist.get_rank() == 0:
-                    print(
-                        f"Dataloader skipping {num_seq} sequences in this batch as starting from {self.resume_from_sequence_number} sequences"
-                    )
-
             self.cur_seq_index += num_seq
+
+            if self.cur_seq_index > self._resume_from_sequence_number % (len(self) * self.batch_size):
+                yield batch
+            elif self.cur_seq_index + num_seq > self._resume_from_sequence_number:
+                logging.info(
+                    f"Dataloader skipped {self.cur_seq_index} sequences in this batch as starting from {self._resume_from_sequence_number} sequences"
+                )

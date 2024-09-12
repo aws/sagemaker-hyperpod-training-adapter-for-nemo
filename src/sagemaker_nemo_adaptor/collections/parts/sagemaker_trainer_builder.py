@@ -81,7 +81,7 @@ class SageMakerTrainerBuilder:
             return SageMakerDDPStrategy(self.cfg)
 
     @property
-    def use_generic_checkpiont(self):
+    def use_generic_checkpoint(self):
         export_sharded = self.cfg.exp_manager.checkpoint_callback_params.get("save_top_k", 0) != 0
         export_full = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0
         return export_sharded or export_full
@@ -93,7 +93,7 @@ class SageMakerTrainerBuilder:
     def _create_plugins(self) -> list:
         plugins = []
 
-        if SUPPORT_CHECKPOINT and (self.use_resilience_checkpoint or self.use_generic_checkpiont):
+        if SUPPORT_CHECKPOINT and (self.use_resilience_checkpoint or self.use_generic_checkpoint):
             plugins.append(SageMakerCheckpointIO())
 
         return plugins
@@ -114,7 +114,7 @@ class SageMakerTrainerBuilder:
                     )
                 )
             # Generic checkpointing callback.
-            if self.use_generic_checkpiont:
+            if self.use_generic_checkpoint:
                 callbacks.append(SageMakerCheckpoint(self.cfg))
         return callbacks
 
@@ -138,7 +138,7 @@ class SageMakerTrainerBuilder:
             plugins=plugins,
             callbacks=callbacks,
             # Disable deafult lightning ModelCheckpoint if none of them are used.
-            enable_checkpointing=self.use_generic_checkpiont or self.use_resilience_checkpoint,
+            enable_checkpointing=self.use_generic_checkpoint or self.use_resilience_checkpoint,
         )
 
         data_module = self._create_data_module(trainer)

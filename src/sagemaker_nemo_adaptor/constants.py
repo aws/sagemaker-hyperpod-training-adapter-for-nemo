@@ -3,6 +3,9 @@ from enum import Enum, auto, unique
 GPUS_PER_NODE = 8
 OPTIMIZER_KEY_PREFIX = "optimizer"
 
+TRAIN_SEQUENCE_NUMBER = "train_sequence_num"
+VAL_SEQUENCE_NUMBER = "val_sequence_num"
+
 
 @unique
 class ModelType(Enum):

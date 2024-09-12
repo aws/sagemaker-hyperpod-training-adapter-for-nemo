@@ -44,6 +44,7 @@ class SageMakerShardedCheckpointIO(CheckpointIO):
         state_dict = trainer._checkpoint_connector.dump_checkpoint(False)
         state_dict.pop("optimizer_states")
         loader.load(state_dict, checkpoint_id=path)
+        trainer.datamodule.load_state_dict(state_dict)
         return state_dict
 
     def remove_checkpoint(self, path: _PATH) -> None:
