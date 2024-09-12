@@ -3,12 +3,13 @@ from pathlib import Path
 from typing import Tuple
 
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import interleave_datasets, load_dataset, load_from_disk
 
 from sagemaker_nemo_adaptor.constants import DataTypes
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
+_SEED = 123
 
 
 class HuggingFacePretrainingDataset:
@@ -17,25 +18,41 @@ class HuggingFacePretrainingDataset:
         self.partition = partition
         self.data_format = self._get_data_format(self.input_path)
         self._dataset = None
+        datasets = []
+        if isinstance(self.input_path, str):
+            datasets.append(self.fetech_dataset(self.input_path))
+        else:
+            for p in self.input_path:
+                datasets.append(self.fetech_dataset(p))
+        # Combine all datasets into single one.
+        self._dataset = interleave_datasets(datasets, seed=_SEED)
+
+    def fetech_dataset(self, path):
         match self.data_format:
             case DataTypes.ARROW:
-                self._dataset = load_from_disk(self.input_path)
+                dataset = load_from_disk(path)
             case DataTypes.JSONGZ:
-                self._dataset = load_dataset(
+                dataset = load_dataset(
                     self.input_path,
-                    data_files=[os.path.join(self.input_path, f"*{DataTypes.JSONGZ}")],
+                    data_files=[os.path.join(path, f"*{DataTypes.JSONGZ}")],
                     split=self.partition,
                 )
             case DataTypes.JSON:
-                self._dataset = load_dataset(
+                dataset = load_dataset(
                     self.input_path,
-                    data_files=[os.path.join(self.input_path, f"*{DataTypes.JSON}")],
+                    data_files=[os.path.join(path, f"*{DataTypes.JSON}")],
                     split=self.partition,
                 )
+            case _:
+                raise NotImplementedError(f"{self.data_format} is not supported.")
+        return dataset
 
     def _get_data_format(self, path):
-        files = list(Path(path).iterdir())
-        files = [f for f in Path(path).iterdir() if f.is_file()]
+        if isinstance(path, str):
+            path = [path]
+        files = []
+        for p in path:
+            files += [f for f in Path(p).iterdir() if f.is_file()]
         suffixes_list = list(set([Path(f).suffixes[0] for f in files]))
         if any(suffix == DataTypes.ARROW for suffix in suffixes_list):
             return DataTypes.ARROW
