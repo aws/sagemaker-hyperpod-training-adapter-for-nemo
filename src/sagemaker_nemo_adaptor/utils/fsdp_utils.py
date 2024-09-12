@@ -4,8 +4,11 @@ from typing import Union
 
 import torch
 from nemo.collections.nlp.parts import utils_funcs
+from peft.tuners import PrefixEncoder, PromptEmbedding, PromptEncoder
 from torch.distributed.fsdp import BackwardPrefetch, MixedPrecision, ShardingStrategy
 from torch.distributed.fsdp.wrap import (
+    _or_policy,
+    lambda_auto_wrap_policy,
     size_based_auto_wrap_policy,
     transformer_auto_wrap_policy,
 )
@@ -32,12 +35,30 @@ def get_backward_fetch_policy(policy: str):
 def get_auto_wrap_policy(policy: str, transformer_layer=None):
     """Get auto wrap policy"""
     if policy == "transformer_auto_wrap_policy":
-        return functools.partial(
+        # to support PEFT, create policy which wraps transformer layers, but also wraps
+        # linear layers (lambda_policy_fn) and other PEFT layers.
+        # this should still work for non-PEFT use cases.
+        def lambda_policy_fn(module):
+            if (
+                not list(module.named_children())
+                and getattr(module, "weight", None) is not None
+                and module.weight.requires_grad
+            ):
+                return True
+            return False
+
+        lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
+        transformer_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls={
+            transformer_layer_cls=(
                 transformer_layer,
-            },
+                PrefixEncoder,
+                PromptEncoder,
+                PromptEmbedding,
+            ),
         )
+
+        return functools.partial(_or_policy, policies=[lambda_policy, transformer_wrap_policy])
     elif policy == "size_based_auto_wrap_policy":
         return functools.partial(
             size_based_auto_wrap_policy,
@@ -115,6 +136,7 @@ def set_mixed_precision_recipe(
     grad_reduce_dtype: Union[int, str] = None,
     set_buffer_dtype: Union[int, str] = None,
     use_smp: bool = True,
+    use_peft: bool = False,
 ) -> MixedPrecision:
     """
     Set FSDP mixed precision recipe. Over-write Nemo's _set_mixed_precision_recipe function to set buffer dtype
@@ -125,6 +147,9 @@ def set_mixed_precision_recipe(
     shared by FSDP.
     `reduce_dtype` sets gradient reduction data type.
     """
+    if use_peft:
+        # PEFT does not need mixed precision policy, has its own casts internally
+        return None
     param_dtype = torch.get_default_dtype()
     if precision == 16:
         param_dtype = reduce_dtype = torch.float16

@@ -10,10 +10,11 @@ from nemo.core.classes.modelPT import ModelPT
 from omegaconf import open_dict
 from omegaconf.dictconfig import DictConfig
 from packaging import version as pversion
+from peft import LoraConfig, get_peft_model
 from pytorch_lightning import Trainer
 from torch.sagemaker import transform
 from transformer_engine.common.recipe import DelayedScaling, Format
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
@@ -41,6 +42,10 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         cls = type(self).__name__
         raise NotImplementedError(f"{cls}.get_model_config not implemented")
+
+    @property
+    def use_peft(self):
+        return self._cfg.peft.peft_type is not None
 
     @property
     def do_finetune(self):
@@ -108,21 +113,66 @@ class SageMakerNLPBaseModel(ModelPT):
             return self.build_model(model_cfg)
 
     def build_model(self, model_cfg):
+        if self.use_peft:
+            return self._build_model_from_pretrain_peft(model_cfg)
         if self.do_finetune_with_pretrained_weights and dist.get_rank() == 0:
             return self._build_model_from_pretrain(model_cfg)
         return self._build_model(model_cfg)
 
-    def _build_model_from_pretrain(self, model_cfg):
+    def _build_model_from_pretrain_peft(self, model_cfg):
+        assert not self.use_smp, "Must set use_smp=False to use PEFT"
+        assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
+        assert self.do_finetune, "Must provide pretrained weights to use PEFT"
+
+        if self._cfg.peft.peft_type == "qlora_4bit":
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_quant_storage=torch.bfloat16,
+            )
+        else:
+            quantization_config = None
+
+        model = self._build_model_from_pretrain(
+            model_cfg, torch_dtype=torch.bfloat16, quantization_config=quantization_config
+        )
+
+        lora_config = LoraConfig(
+            target_modules="all-linear",
+            # Alpha parameter for LoRA scaling
+            lora_alpha=self._cfg.peft.alpha,
+            # Dropout probability for LoRA layers
+            lora_dropout=self._cfg.peft.dropout,
+            # LoRA attention dimension
+            r=self._cfg.peft.rank,
+            bias="none",
+            task_type="CAUSAL_LM",
+            inference_mode=False,
+        )
+
+        model.enable_input_require_grads()
+        model = get_peft_model(model, lora_config)
+        if dist.get_rank() == 0:
+            model.print_trainable_parameters()
+        return model
+
+    def _build_model_from_pretrain(self, model_cfg, torch_dtype=None, quantization_config=None):
         path = self._cfg.pretrained_model_name_or_path
         _logger.info("Loading pretrained weights from %s.", path)
         use_flash_attn = self._cfg.use_flash_attention
         attn = "flash_attention_2"
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
-            return AutoModelForCausalLM.from_pretrained(path, config=model_cfg)
+            return AutoModelForCausalLM.from_pretrained(
+                path, config=model_cfg, torch_dtype=torch_dtype, quantization_config=quantization_config
+            )
         return AutoModelForCausalLM.from_pretrained(
             path,
             attn_implementation=attn,
             config=model_cfg,
+            torch_dtype=torch_dtype,
+            quantization_config=quantization_config,
         )
 
     def _build_model(self, model_cfg):

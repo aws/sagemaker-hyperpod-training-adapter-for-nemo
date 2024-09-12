@@ -86,7 +86,7 @@ model:
   fp8_amax_compute_algo: max
 
   # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
-  pretrained_model_name_or_path: null
+  pretrained_model_name_or_path: null # "/fsx/hf_pretrained_models/Meta-Llama-3-8B"
 
   precision: ${trainer.precision}
 
@@ -115,6 +115,10 @@ model:
     dataset_type: hf
     use_synthetic_data: True
     zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped
+
+  # PEFT
+  peft:
+    peft_type: null # lora
 
 internal:
   config_verified: false

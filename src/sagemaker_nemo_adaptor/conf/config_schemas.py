@@ -103,6 +103,13 @@ class BaseModelDataConfig(BaseModel):
         return self
 
 
+class BaseModelPeftConfig(BaseModel):
+    peft_type: Optional[Literal["lora", "qlora_4bit"]] = None
+    rank: int = Field(default=32, ge=1)
+    alpha: float = Field(default=16.0, ge=0)
+    dropout: float = Field(default=0.1, ge=0)
+
+
 class BaseModelConfig(BaseModel):
     # needed to disallow protected namespace "model_"
     model_config: ConfigDict = ConfigDict(protected_namespaces=())
@@ -168,6 +175,7 @@ class BaseModelConfig(BaseModel):
     # CHILD CONFIGS
     optim: BaseModelOptimizerConfig = Field(default_factory=BaseModelOptimizerConfig)
     data: BaseModelDataConfig = Field(default_factory=lambda: BaseModelDataConfig(use_synthetic_data=True))
+    peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
 
     @model_validator(mode="before")
     def before_model_validations(cls, data: Any) -> Any:

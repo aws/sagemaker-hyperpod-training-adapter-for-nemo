@@ -55,8 +55,8 @@ class TestBuildModel:
     @pytest.mark.parametrize(
         ("version", "exp_args_len", "exp_kwargs_len"),
         [
-            [transformers_below_version, 1, 1],
-            [transformers_threshold_version, 1, 2],
+            [transformers_below_version, 1, 3],
+            [transformers_threshold_version, 1, 4],
         ],
     )
     def test_w_pretrained_model_name_or_path(self, full_config, mocker, version, exp_args_len, exp_kwargs_len):
@@ -95,7 +95,7 @@ class TestBuildModel:
         args, kwargs = from_pretrained_stub.call_args
         from_pretrained_stub.assert_called_once()
         assert len(args) == 1
-        assert len(kwargs) == 1
+        assert len(kwargs) == 3
         assert "attn_implementation" not in kwargs
 
     @pytest.mark.parametrize(

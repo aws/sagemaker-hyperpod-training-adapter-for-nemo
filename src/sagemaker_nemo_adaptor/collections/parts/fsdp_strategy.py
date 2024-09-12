@@ -114,7 +114,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         cfg = self.cfg.model
         transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
         auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer)
-        mixed_precision_policy = set_mixed_precision_recipe(precision=cfg.precision, use_smp=use_smp)
+        mixed_precision_policy = set_mixed_precision_recipe(
+            precision=cfg.precision,
+            use_smp=use_smp,
+            use_peft=model.use_peft,
+        )
         sharding_strategy = get_sharding_strategy(cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(cfg.backward_fetch_policy)
         param_init_fn, post_param_init_fn, model_context = self._setup_delayed_param(cfg, model)
