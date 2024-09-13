@@ -4,13 +4,15 @@ from typing import Any, Dict, Optional
 import pytorch_lightning as pl
 import torch.sagemaker.distributed.checkpoint.state_dict_loader as loader
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
-from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
+from nemo.utils import logging
 
-from sagemaker_nemo_adaptor.utils.get_rank import get_coordinator_rank, is_action_rank
+from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
+    SageMakerBaseCheckpointIO,
+)
 
 
-class SageMakerShardedCheckpointIO(CheckpointIO):
+class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
 
@@ -23,15 +25,13 @@ class SageMakerShardedCheckpointIO(CheckpointIO):
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
         strategy = trainer.strategy
-        group = strategy.model.process_group
-        saver.maybe_finalize_async_calls(blocking=True, process_group=group)
-        coordinator_rank = get_coordinator_rank(group)
-        if is_action_rank(strategy.global_rank):
+        saver.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)
+        if self.app_state.is_fsdp_action_rank:
             saver.async_save(
                 checkpoint,
                 checkpoint_id=path,
-                process_group=group,
-                coordinator_rank=coordinator_rank,
+                process_group=self.app_state.fsdp_process_group,
+                coordinator_rank=self.app_state.fsdp_coordinator_rank,
             )
 
     def load_checkpoint(
@@ -44,13 +44,12 @@ class SageMakerShardedCheckpointIO(CheckpointIO):
         state_dict = trainer._checkpoint_connector.dump_checkpoint(False)
         state_dict.pop("optimizer_states")
         loader.load(state_dict, checkpoint_id=path)
-        trainer.datamodule.load_state_dict(state_dict)
+        self.load_data_module_and_lr_schedulers(trainer, state_dict)
+        logging.info(f"Loaded Sharded checkpoint")
         return state_dict
 
     def remove_checkpoint(self, path: _PATH) -> None:
         shutil.rmtree(path, ignore_errors=True)
 
-    def teardown(self, trainer):
-        strategy = trainer.strategy
-        group = strategy.model.process_group
-        saver.maybe_finalize_async_calls(blocking=True, process_group=group)
+    def teardown(self):
+        saver.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)

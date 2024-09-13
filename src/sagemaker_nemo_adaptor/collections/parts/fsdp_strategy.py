@@ -74,6 +74,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.use_smp = cfg.use_smp
         self.smp_config_dict = self._setup_smp_config(cfg)
         self.app_state = SageMakerAppState()
+        self._model_prefix = ""
 
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
@@ -110,6 +111,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.app_state.current_replication_group = current_replication_group
 
     def _setup_model(self, model):
+        # retrieve the root module name of the model which is the first one.
+        self._model_prefix = list(model._modules.keys())[0]
         use_smp = self.use_smp
         cfg = self.cfg.model
         transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
@@ -291,13 +294,12 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         assert "state_dict" in checkpoint, "Missing model 'state_dict'"
         with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
             state_dict = checkpoint["state_dict"]
-            if self.cfg.model.get("tensor_model_parallel_degree", 1) > 1:
-                # XXX: This is a workaround solution bc rubik's save/load hooks are inconsistent.
-                # ref:
-                #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
-                #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
-                state_dict[f"model.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
-                state_dict[f"model.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
+            # ref:
+            #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
+            #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
+            # tp info needs to be prefixed with model prefixed, or the key will be dropped.
+            state_dict[f"{self._model_prefix}.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
+            state_dict[f"{self._model_prefix}.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
             self.model.load_state_dict(checkpoint["state_dict"])
 
     def load_full_model_state_dict(self, checkpoint):

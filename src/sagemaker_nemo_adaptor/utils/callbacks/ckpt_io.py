@@ -79,4 +79,4 @@ class SageMakerCheckpointIO(CheckpointIO):
     def teardown(self, trainer):
         typ = SageMakerCheckpointType.SHARDED
         checkpoint_io = self._checkpoint_io[typ]
-        checkpoint_io.teardown(trainer)
+        checkpoint_io.teardown()

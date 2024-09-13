@@ -1,9 +1,7 @@
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
-import torch.distributed as dist
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
-from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
 from torch.sagemaker.distributed.checkpoint.filesystem import (
@@ -13,9 +11,12 @@ from torch.sagemaker.distributed.checkpoint.state_dict_loader import load
 from torch.sagemaker.distributed.checkpoint.state_dict_utils import init_optim_state
 
 from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
+from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
+    SageMakerBaseCheckpointIO,
+)
 
 
-class SageMakerLocalCheckpointIO(CheckpointIO):
+class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.app_state = SageMakerAppState()
@@ -48,9 +49,9 @@ class SageMakerLocalCheckpointIO(CheckpointIO):
             coordinator_rank=self.app_state.replication_coordinator_rank,
             storage_reader=DistributedFileSystemReader(path),
         )
-        trainer.datamodule.load_state_dict(state_dict)
-        if dist.get_rank() == 0:
-            logging.info(f"Loaded Local checkpoint")
+        self.load_data_module_and_lr_schedulers(trainer, state_dict)
+        logging.info(f"Loaded Local checkpoint")
+        return state_dict
 
     def remove_checkpoint(self, path: _PATH) -> None:
         raise NotImplementedError("SageMakerLocalCheckpointIO.remove_checkpoint not implemented")
