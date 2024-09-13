@@ -106,10 +106,18 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
     """
 
     def __init__(self, enable_auto_reload: bool, checkpoint_dir: Optional[str] = None, *args, **kw):
+        # If user specify a path to resume, disable auto resume.
         super().__init__(checkpoint_dir, *args, **kw)
         self._enable_auto_reload = enable_auto_reload
-        # TODO: Update the "every_n_train_steps"
         self._every_n_train_steps = 1
+        self._num_checkpoint = 0
+
+    @property
+    def save_top_k(self):
+        # Set save_top_k to three is safer. The reason is that the worst case
+        # is new checkpoint start but old checkpoint is still writing. If both
+        # checkpoint corrupt, we don't have any checkpoint.
+        return 3
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """
@@ -144,7 +152,6 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
         return saved_checkpoints
 
     def _should_save_local(self, trainer: "pl.Trainer"):
-        # TODO: check when should save local checkpoints for resilience
         is_last_step = trainer.max_steps == trainer.global_step
         is_every_n = trainer.global_step % self._every_n_train_steps == 0
         return is_last_step or is_every_n
@@ -160,10 +167,17 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
             return
 
         local_sub_dir = self.local_checkpoint_sub_dir(trainer)
-        local_checkpoint_dir = os.path.join(self.checkpoint_dir, "local", f"steps_{trainer.global_step}", local_sub_dir)
-        self._save(
-            trainer, checkpoint_io, checkpoint_type=SageMakerCheckpointType.LOCAL, checkpoint_dir=local_checkpoint_dir
+        local_checkpoint_dir = os.path.join(
+            self.checkpoint_dir, "local", f"{self._num_checkpoint % self.save_top_k}", local_sub_dir
         )
+        self._save(
+            trainer,
+            checkpoint_io,
+            checkpoint_type=SageMakerCheckpointType.LOCAL,
+            checkpoint_dir=local_checkpoint_dir,
+        )
+
+        self._num_checkpoint += 1
 
 
 class SageMakerCheckpoint(SageMakerModelCheckpointBase):

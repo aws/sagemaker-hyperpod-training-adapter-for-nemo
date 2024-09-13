@@ -110,7 +110,8 @@ class SageMakerTrainerBuilder:
                 enabled_auto_reload = exp_manager.resume_from_checkpoint == None
                 callbacks.append(
                     SageMakerModelCheckpointResilience(
-                        enable_auto_reload=enabled_auto_reload, checkpoint_dir=exp_manager.get("checkpoint_dir", None)
+                        enable_auto_reload=enabled_auto_reload,
+                        checkpoint_dir=exp_manager.get("checkpoint_dir", None),
                     )
                 )
             # Generic checkpointing callback.
