@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, Optional, Union
 
 import torch
@@ -123,6 +124,11 @@ class SageMakerNLPBaseModel(ModelPT):
         assert not self.use_smp, "Must set use_smp=False to use PEFT"
         assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
         assert self.do_finetune, "Must provide pretrained weights to use PEFT"
+
+        # set env vars for efficient HF model loading (PEFT does not use SMP delayed param)
+        # see https://tiny.amazon.com/15r3rmil3/githhuggtranblob2790srctran
+        os.environ["ACCELERATE_USE_FSDP"] = "True"
+        os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
 
         if self._cfg.peft.peft_type == "qlora_4bit":
             quantization_config = BitsAndBytesConfig(
