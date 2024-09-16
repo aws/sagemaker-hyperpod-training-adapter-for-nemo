@@ -1,17 +1,3 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # HAVE TO patch only _build_index_mappings function
 
 """
@@ -485,7 +471,7 @@ def _build_index_mappings(
                     num_samples_per_epoch + 1
                 ), "last epoch number of samples exceeded max value."
                 # If we have less than 80% of the samples for the last epoch,
-                # seperate out the epoch and treat it differently.
+                # separate out the epoch and treat it differently.
                 # Note: the 80% number is just based on common sense and can
                 # be adjusted if needed.
                 separate_last_epoch = last_epoch_num_samples < int(0.80 * num_samples_per_epoch)

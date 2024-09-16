@@ -7,12 +7,6 @@ from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from omegaconf.dictconfig import DictConfig
 
 from sagemaker_nemo_adaptor.utils.dist_utils import initialize_model_parallel_for_nemo
-from sagemaker_nemo_adaptor.utils.fsdp_utils import (
-    get_auto_wrap_policy,
-    get_backward_fetch_policy,
-    get_sharding_strategy,
-    get_transformer_layer,
-)
 
 
 class SageMakerDDPStrategy(NLPDDPStrategy):

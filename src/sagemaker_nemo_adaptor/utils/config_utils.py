@@ -24,16 +24,6 @@ def _get_model_validator(config: DictConfig) -> type[BaseModel]:
     return SchemaValidator
 
 
-def _save_merged_config(merged_config: DictConfig) -> None:
-    # TODO: The dirname will point to a location in Hyperpod that the customer
-    # will select. We will eventually have a pointer to that location.
-    dirname = f"/fsx/users/julianhr/sagemaker-adaptor-nemo/scripts/conf"
-    filename = "assembled_recipe.yaml"
-
-    OmegaConf.save(merged_config, f"{dirname}/{filename}")
-    _logger.info(f"Config saved to {dirname}/{filename}")
-
-
 def _validate_model_type(model_type: Optional[str]) -> None:
     if model_type is None:
         msg = "model_type is missing but is required"
@@ -96,7 +86,6 @@ def validate_config(fn: _T) -> _T:
         merged_config, validated_model = _validate_schema(cfg)
         _validate_custom_recipe_extra_params(validated_model)
         _validate_params_not_provided_by_custom_recipe(cfg, merged_config)
-        # _save_merged_config(merged_config)
 
         return fn(merged_config, *args, **kwargs)
 

@@ -15,9 +15,10 @@ from nemo.utils.exp_manager import (
     TimingCallback,
     configure_loggers,
     configure_no_restart_validation_training_loop,
+    get_git_diff,
+    get_git_hash,
+    get_log_dir,
 )
-from nemo.utils.exp_manager import error_checks as nemo_error_checks
-from nemo.utils.exp_manager import get_git_diff, get_git_hash, get_log_dir
 from nemo.utils.lightning_logger_patch import add_filehandlers_to_pl_logger
 from omegaconf import DictConfig, OmegaConf
 
@@ -37,11 +38,6 @@ class ExpManagerConfig(NeMoExpManagerConfig):
     export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
     checkpoint_dir: Optional[str] = None
     auto_checkpoint: Optional[bool] = False
-
-
-def error_checks(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None):
-    nemo_error_checks(trainer, cfg)
-    # TODO: add our customized error checking, probably we can insert recipe checker here.
 
 
 def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None) -> Optional[Path]:

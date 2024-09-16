@@ -14,7 +14,7 @@ trainer:
 
 
 exp_manager:
-  exp_dir: /fsx/users/rnadimp/exp/
+  exp_dir: /fsx/exp/
   name: my_experiment
   create_tensorboard_logger: True
   create_checkpoint_callback: True
@@ -30,7 +30,7 @@ distributed_backend: nccl
 
 # Start training from pretrained model
 model:
-  model_type: mistral # TODO: need functionality to parse model type automatically, this arg can stil be kept
+  model_type: mistral # TODO: need functionality to parse model type automatically, this arg can still be kept
 
   train_batch_size: 4
   tensor_model_parallel_degree: 1

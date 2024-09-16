@@ -240,7 +240,7 @@ class BaseExportFullModelConfig(BaseModel):
 
 
 class BaseExpManager(BaseModel):
-    exp_dir: str = "/fsx/users/rnadimp/exp/"
+    exp_dir: str = "/fsx/exp/"
     name: str = "my_experiment"
     create_tensorboard_logger: bool = True
     create_checkpoint_callback: bool = True

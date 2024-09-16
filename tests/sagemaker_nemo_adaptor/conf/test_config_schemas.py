@@ -379,7 +379,7 @@ class Test_BaseExpManager:
     def test_no_args(self):
         try:
             validated = BaseExpManager()
-            assert validated.exp_dir == "/fsx/users/rnadimp/exp/"
+            assert validated.exp_dir == "/fsx/exp/"
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
