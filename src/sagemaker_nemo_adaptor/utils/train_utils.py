@@ -3,6 +3,7 @@
 import functools
 
 import torch
+import torch.sagemaker as tsm
 
 from sagemaker_nemo_adaptor.utils.fsdp_utils import get_transformer_layer
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
@@ -33,7 +34,6 @@ def apply_activation_checkpoint(
     )
 
     if fp8 and use_smp:
-        import torch.sagemaker as tsm
         import transformer_engine
 
         checkpoint_fn = functools.partial(
@@ -53,6 +53,33 @@ def apply_activation_checkpoint(
         checkpoint_wrapper, checkpoint_impl=checkpoint_impl, checkpoint_fn=checkpoint_fn
     )
     apply_activation_checkpointing(model, checkpoint_wrapper_fn=entrant_wrapper, check_fn=check_fn_gpt)
+
+
+def get_batch_for_cp_rank(batch):
+    # TODO: 1. work with rubik to get the final one
+    # TODO: 2. add license
+    # Based on https://tiny.amazon.com/1bcmbuhje/githNVIDNeMoblob58d6nemocoll
+    cp_size = tsm.state.cp_size
+    cp_rank = tsm.state.cp_rank
+    if cp_size > 1:
+        return_batch = []
+        for val in batch:
+            if val is not None:
+                seq_dim = 1
+                val = val.view(
+                    *val.shape[0:seq_dim],
+                    2 * cp_size,
+                    val.shape[seq_dim] // (2 * cp_size),
+                    *val.shape[(seq_dim + 1) :],
+                )
+                index = torch.tensor([cp_rank, (2 * cp_size - cp_rank - 1)], device=val.device)
+                val = val.index_select(seq_dim, index)
+                val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2) :])
+            return_batch.append(val)
+        return_batch = tuple(return_batch)
+    else:
+        return_batch = batch
+    return return_batch
 
 
 def patch_neox_rope(model):

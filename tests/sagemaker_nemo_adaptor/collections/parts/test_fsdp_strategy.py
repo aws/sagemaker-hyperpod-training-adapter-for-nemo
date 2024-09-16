@@ -64,7 +64,11 @@ def test_setup_environment(mocker, full_config):
     global_rank = strategy.global_rank
     local_rank = strategy.local_rank
     test_tensor_parallel_degree = 4
-    strategy.smp_config_dict = {"tensor_parallel_degree": test_tensor_parallel_degree}
+    test_context_parallel_degree = 2
+    strategy.smp_config_dict = {
+        "tensor_parallel_degree": test_tensor_parallel_degree,
+        "context_parallel_degree": test_context_parallel_degree,
+    }
 
     # test
     strategy.setup_environment()
@@ -78,7 +82,7 @@ def test_setup_environment(mocker, full_config):
     assert app_state.world_size == world_size
     assert app_state.global_rank == global_rank
     assert app_state.local_rank == local_rank
-    assert app_state.data_parallel_size == world_size // test_tensor_parallel_degree
+    assert app_state.data_parallel_size == world_size // (test_tensor_parallel_degree * test_context_parallel_degree)
     assert app_state._is_megatron_initialized == True
 
 

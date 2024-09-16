@@ -3,7 +3,9 @@ from transformers import set_seed
 from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
 
-def initialize_model_parallel_for_nemo(world_size, global_rank, local_rank, tensor_model_parallel_size=1, seed=None):
+def initialize_model_parallel_for_nemo(
+    world_size, global_rank, local_rank, tensor_model_parallel_size=1, context_parallel_size=1, seed=None
+):
     # updating NeMo globals
     # TODO: Update EP,PP when applicable
     app_state = SageMakerAppState()
@@ -22,8 +24,8 @@ def initialize_model_parallel_for_nemo(world_size, global_rank, local_rank, tens
         pass
 
     app_state.model_parallel_size = tensor_model_parallel_size
-    app_state.data_parallel_size = world_size // tensor_model_parallel_size
-    app_state.data_parallel_rank = global_rank // tensor_model_parallel_size
+    app_state.data_parallel_size = world_size // (tensor_model_parallel_size * context_parallel_size)
+    app_state.data_parallel_rank = global_rank // (tensor_model_parallel_size * context_parallel_size)
 
     _set_random_seed(seed)
 

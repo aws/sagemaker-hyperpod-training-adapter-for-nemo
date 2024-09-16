@@ -44,6 +44,7 @@ model:
   train_batch_size: 2
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1
+  context_parallel_degree: 1
   moe: False
   sequence_parallel: True
   activation_checkpointing: True

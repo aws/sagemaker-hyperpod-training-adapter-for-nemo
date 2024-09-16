@@ -34,17 +34,30 @@ class Test_SageMakerParallelConfig:
         try:
             validated = SageMakerParallelConfig()
             assert validated.tensor_model_parallel_degree == 1
+            assert validated.context_parallel_degree == 1
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
-    def test_outside_of_range(self):
+    def test_tp_outside_of_range(self):
         config = self.build_config(tensor_model_parallel_degree=0)
 
         with pytest.raises(ValidationError) as e:
             SageMakerParallelConfig.model_validate(config)
 
-    def test_not_power_of_two(self):
+    def test_tp_not_power_of_two(self):
         config = self.build_config(tensor_model_parallel_degree=3)
+
+        with pytest.raises(ValidationError) as e:
+            SageMakerParallelConfig.model_validate(config)
+
+    def test_cp_outside_of_range(self):
+        config = self.build_config(context_parallel_degree=0)
+
+        with pytest.raises(ValidationError) as e:
+            SageMakerParallelConfig.model_validate(config)
+
+    def test_cp_not_power_of_two(self):
+        config = self.build_config(context_parallel_degree=3)
 
         with pytest.raises(ValidationError) as e:
             SageMakerParallelConfig.model_validate(config)
@@ -52,10 +65,12 @@ class Test_SageMakerParallelConfig:
     def test_default_value(self):
         config = self.build_config()
         del config["tensor_model_parallel_degree"]
+        del config["context_parallel_degree"]
 
         try:
             validated = SageMakerParallelConfig.model_validate(config)
             assert validated.tensor_model_parallel_degree == 1
+            assert validated.context_parallel_degree == 1
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
@@ -63,6 +78,7 @@ class Test_SageMakerParallelConfig:
         return {
             "tensor_model_parallel_degree": 1,
             "expert_model_parallel_degree": 1,
+            "context_parallel_degree": 1,
             **kwargs,
         }
 

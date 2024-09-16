@@ -26,26 +26,36 @@ HELPER FUNCTIONS
 """
 
 
-def validate_degrees_le_world_size(
+def validate_distributed_degrees(
     shard_degree: Optional[int],
     tensor_model_parallel_degree: Optional[int],
     expert_model_parallel_degree: Optional[int],
+    context_parallel_degree: Optional[int],
     num_nodes: Optional[int],
 ) -> None:
     """
-    Check that the degrees are <= world size so the data doesn't exceed the hardware capacity.
+    Check that the degrees are legal.
     """
     # default param values to 1 if they are missing
     sd = shard_degree or 1
     tp = tensor_model_parallel_degree or 1
     ep = expert_model_parallel_degree or 1
+    cp = context_parallel_degree or 1
     degree_mult = sd * tp * ep
     world_size = (num_nodes or 1) * GPUS_PER_NODE
 
-    if degree_mult > world_size:
-        msg = "The multiplication of 'shard_degree', 'tensor_model_parallel_degree'"
-        msg += " and 'expert_model_parallel_degree' is greater than the world size"
-        raise ValueError(msg)
+    # Validate the degree multiplication <= world_size
+    if world_size % degree_mult > 0:
+        raise ValueError(
+            f"Please provide valid sizes: world size ({world_size}) is not a product of "
+            f"(shard_degree, tensor_model_parallel_degree, expert_model_parallel_degree) ({sd}, {tp}, {ep})."
+        )
+
+    # Validate CP degree <= shard degree
+    if cp > 1 and cp > sd:
+        raise ValueError(
+            f"Please provide valid sizes: context parallel degree ({cp}) shouldn't be greater than shard degree ({sd})"
+        )
 
 
 """
@@ -56,9 +66,9 @@ BASE CLASSES
 class SageMakerParallelConfig(BaseModel):
     tensor_model_parallel_degree: int = Field(default=1, ge=1)
     expert_model_parallel_degree: int = Field(default=1, ge=1)
-    # context_model_parallel_degree: int = Field(ge=1) # Rubik will support this soon
+    context_parallel_degree: int = Field(default=1, ge=1)
 
-    @field_validator("tensor_model_parallel_degree", "expert_model_parallel_degree")
+    @field_validator("tensor_model_parallel_degree", "expert_model_parallel_degree", "context_parallel_degree")
     @classmethod
     def validate_tensor_model_parallel_degree(cls, value: int, info: FieldValidationInfo):
         if not is_power_of_two(value):
@@ -292,10 +302,11 @@ class BaseConfig(BaseModel):
     def after_model_validations(self) -> "BaseConfig":
         sd = getattr(self.model, "shard_degree", None)
         tp = getattr(self.model, "tensor_model_parallel_degree", None)
-        ed = getattr(self.model, "expert_model_parallel_degree", None)
+        ep = getattr(self.model, "expert_model_parallel_degree", None)
+        cp = getattr(self.model, "context_parallel_degree", None)
         num_nodes = getattr(self.trainer, "num_nodes", None)
 
-        validate_degrees_le_world_size(sd, tp, ed, num_nodes)
+        validate_distributed_degrees(sd, tp, ep, cp, num_nodes)
 
         return self
 

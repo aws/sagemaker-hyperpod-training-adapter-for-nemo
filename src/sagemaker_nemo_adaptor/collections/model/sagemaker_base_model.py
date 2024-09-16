@@ -18,6 +18,7 @@ from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
+from sagemaker_nemo_adaptor.utils.train_utils import get_batch_for_cp_rank
 
 TF_VERSION = pversion.parse(transformers.__version__)
 
@@ -35,6 +36,13 @@ class SageMakerNLPBaseModel(ModelPT):
         self._cfg = cfg
         self.model = None
         self.use_smp = use_smp
+
+        # Setup Transformer Engine Variable TODO: move it inside smp library
+        os.environ["NVTE_TORCH_COMPILE"] = "0"
+        os.environ["TORCH_COMPILE_DISABLE"] = "1"
+        os.environ["NVTE_FUSED_ATTN"] = "1"
+        os.environ["NVTE_FLASH_ATTN"] = "0"
+
         super().__init__(cfg, trainer)
 
     def get_model_config(self):
@@ -195,7 +203,7 @@ class SageMakerNLPBaseModel(ModelPT):
         fp8 = self._cfg.fp8
         fp8_recipe = self.fp8_recipe
         fp8_group = tsm.state.world_process_group
-        input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
+        input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
         with transformer_engine.pytorch.fp8_autocast(
             enabled=fp8,
             fp8_recipe=fp8_recipe,
@@ -210,7 +218,7 @@ class SageMakerNLPBaseModel(ModelPT):
             )["loss"]
 
     def _training_step(self, batch, batch_idx, *a, **kw):
-        input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
+        input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
         return self(
             *a,
             input_ids=input_ids,
@@ -229,6 +237,24 @@ class SageMakerNLPBaseModel(ModelPT):
         else:
             self.loss = self._training_step(batch, batch_idx, *a, **kw)
         return self.loss
+
+    def _prepare_input_batch(self, batch, batch_idx):
+        """
+        Parse input batch, pre-process for context parallel
+        """
+        input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
+        if self._cfg.context_parallel_degree > 1:
+            input_ids, labels = get_batch_for_cp_rank((input_ids, labels))
+
+        if batch_idx == 0:
+            # checking only on batch 0 to reduce checks during runtime
+            if input_ids.shape[1] != (self._cfg.max_context_width // self._cfg.context_parallel_degree):
+                _logger.warning(
+                    f"Input data passed {input_ids.shape} does not respect max_context_width set. If context parallelism is enabled,",
+                    f"input_ids sequence length == (model.max_context_width / model.context_parallel_degree) ",
+                )
+
+        return input_ids, _, labels
 
     def setup_optimization(
         self,
