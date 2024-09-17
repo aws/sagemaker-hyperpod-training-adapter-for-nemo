@@ -1,3 +1,4 @@
+import glob
 import os
 from copy import deepcopy
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
+import torch.distributed as dist
 from nemo.utils import logging
 from pytorch_lightning.callbacks import Checkpoint
 from torch import Tensor
@@ -68,7 +70,7 @@ class SageMakerModelCheckpointBase(Checkpoint):
         logging.debug(state_dict)
         trainer.strategy.load_model_state_dict(state_dict)
         trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
-        # TODO(htzhong): add the data module loading here.
+        return state_dict
 
     def _save(
         self,
@@ -112,6 +114,18 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
         self._every_n_train_steps = 1
         self._num_checkpoint = 0
 
+    def sort_checkpoint_dir(self, checkpoint_dirs):
+        # TODO: Implement the logic to sort the checkpoint_dirs, ie: newest checkpoint.
+        return sorted(checkpoint_dirs, key=lambda x: x.path, reverse=True)
+
+    def is_checkpoint_dir_valid(self, checkpoint_dir):
+        """
+        Make sure that every checkpoint dir has at least one .metadata file.
+        """
+        all_sub_dirs = glob.glob(os.path.join(checkpoint_dir, "*"))
+        metadata_files = glob.glob(os.path.join(checkpoint_dir, "*/.metadata"))
+        return len(all_sub_dirs) == len(metadata_files)
+
     @property
     def save_top_k(self):
         # Set save_top_k to three is safer. The reason is that the worst case
@@ -121,18 +135,40 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """
-        Resuming from local checkpoints until it succeeds.
+        Resuming from local checkpoints until it succeeds. Given a checkpoint dir, it checks:
+
+        1. all subdirs have .metadata files. Thus a complete checkpoint directory.
+        2. Load the checkpoint and check if all ranks pass.
         """
+        device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device("cpu")
+        loaded_checkpoint = ""
         if self._enable_auto_reload:
-            for saved_checkpoint_dir in self.saved_checkpoint_dirs:
+            for saved_checkpoint_dir in self.sort_checkpoint_dir(self.saved_checkpoint_dirs):
+                logging.info(f"loading local checkpoint: {saved_checkpoint_dir.path}")
+                if not self.is_checkpoint_dir_valid(saved_checkpoint_dir.path):
+                    logging.info(f"Invalid checkpoint dir: {saved_checkpoint_dir.path}")
+                    continue
                 try:
-                    logging.info(f"loading local checkpoint: {saved_checkpoint_dir}")
                     typ = SageMakerCheckpointType.LOCAL
-                    path = os.path.join(saved_checkpoint_dir, self.local_checkpoint_sub_dir(trainer))
-                    self._load_checkpoint(trainer, path, typ)
-                    break
+                    path = os.path.join(saved_checkpoint_dir.path, self.local_checkpoint_sub_dir(trainer))
+                    state_dict = self._load_checkpoint(trainer, path, typ)
+                    # If loading succeedes, set it global_step and make sure it aligns across all ranks.
+                    success_tensor = torch.tensor([state_dict["global_step"]], dtype=torch.int, device=device)
                 except:
-                    pass
+                    # If loading succeedes, set it -1.
+                    success_tensor = torch.tensor([-1], dtype=torch.int, device=device)
+
+                # Only if all ranks load successfully, it is a complete loading.
+                dist.all_reduce(success_tensor, torch.distributed.ReduceOp.MIN)
+                if success_tensor.item() >= 0 and success_tensor.item() == state_dict["global_step"]:
+                    loaded_checkpoint = saved_checkpoint_dir.path
+                    break
+                logging.warning(f"Fail loading local checkpoint: {saved_checkpoint_dir.path}")
+
+        if loaded_checkpoint:
+            logging.info(f"Successfully loading from {loaded_checkpoint}")
+        else:
+            logging.warning(f"Did not load successfully from any of the checkpoints. Continuing...")
 
     def local_checkpoint_sub_dir(self, trainer):
         tp_rank = f"tp{state.tp_rank}"
