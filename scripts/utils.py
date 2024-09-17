@@ -1,4 +1,5 @@
 """SageMaker environment utils."""
+
 import os
 
 SM_ENV_KEY = "TRAINING_JOB_ARN"

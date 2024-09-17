@@ -193,9 +193,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return (
             initer.get_param_init_fn(),
             initer.get_post_param_init_fn(),
-            initer.validate_params_and_buffers_inited()
-            if not model.do_finetune_with_pretrained_weights
-            else nullcontext(),
+            (
+                initer.validate_params_and_buffers_inited()
+                if not model.do_finetune_with_pretrained_weights
+                else nullcontext()
+            ),
         )
 
     def setup(self, trainer: "pl.Trainer") -> None:

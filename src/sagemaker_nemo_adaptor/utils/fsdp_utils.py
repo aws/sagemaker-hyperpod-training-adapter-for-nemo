@@ -71,7 +71,7 @@ def get_auto_wrap_policy(policy: str, transformer_layer=None):
 
 def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
     """Get transformer layer."""
-    if use_smp and not moe:
+    if use_smp:
         # For pt-2.1-tsm-2.1 releases and below,
         # We can't checkpoint our transformer.TransformerLayer class as it takes a tuple as input,
         # so we checkpoint the te.TETransformerLayer directly instead.

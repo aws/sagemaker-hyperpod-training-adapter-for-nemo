@@ -139,15 +139,15 @@ class BaseModelConfig(BaseModel):
     grad_clip: float = Field(default=1.0, ge=0)  # 0 == disabled
 
     # FSDP Configs
-    sharding_strategy: Literal[
-        "no_shard", "shard_grad_op", "hybrid_shard", "_hybrid_shard_zero2", "full_shard"
-    ] = "hybrid_shard"
+    sharding_strategy: Literal["no_shard", "shard_grad_op", "hybrid_shard", "_hybrid_shard_zero2", "full_shard"] = (
+        "hybrid_shard"
+    )
     forward_prefetch: bool = True
     shard_degree: Optional[int] = Field(default=None, ge=1)
     backward_fetch_policy: Literal["backward_post", "backward_pre"] = "backward_pre"
-    auto_wrap_policy: Literal[
-        "size_based_auto_wrap_policy", "transformer_auto_wrap_policy"
-    ] = "transformer_auto_wrap_policy"
+    auto_wrap_policy: Literal["size_based_auto_wrap_policy", "transformer_auto_wrap_policy"] = (
+        "transformer_auto_wrap_policy"
+    )
     limit_all_gathers: bool = True
     use_orig_param: bool = True
 

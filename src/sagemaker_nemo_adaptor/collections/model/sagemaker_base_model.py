@@ -14,6 +14,7 @@ from packaging import version as pversion
 from peft import LoraConfig, get_peft_model
 from pytorch_lightning import Trainer
 from torch.sagemaker import transform
+from torch.sagemaker.moe.moe_config import MoEConfig
 from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
@@ -54,7 +55,7 @@ class SageMakerNLPBaseModel(ModelPT):
 
     @property
     def use_peft(self):
-        return self._cfg.peft.peft_type is not None
+        return hasattr(self._cfg, "peft") and self._cfg.peft.peft_type is not None
 
     @property
     def do_finetune(self):
@@ -84,7 +85,8 @@ class SageMakerNLPBaseModel(ModelPT):
         model = self._setup_delayed_param(model_cfg)
         if self.do_finetune_with_pretrained_weights:
             dist.barrier()
-        self.model = self._transform(model)
+        if self.use_smp:
+            self.model = self._transform(model)
         self.fp8_recipe = self._fp8_delayed_scaling()
 
     def param_init_fn(self, module):
@@ -102,16 +104,34 @@ class SageMakerNLPBaseModel(ModelPT):
             )
 
     def _transform(self, model):
-        if not self.use_smp:
-            return model
-
-        moe_config = None  # TODO: Add moe support
+        moe_config = None
         load_state_dict_from_rank0 = self.do_finetune_with_pretrained_weights
-        return transform(
-            model,
-            config=moe_config,
-            load_state_dict_from_rank0=load_state_dict_from_rank0,
-        )
+        if self._cfg.moe:
+            moe_config = MoEConfig(
+                smp_moe=self.use_smp,
+                random_seed=12345,
+                moe_load_balancing=self._cfg.moe_load_balancing,
+                global_token_shuffle=self._cfg.global_token_shuffle,
+                moe_all_to_all_dispatcher=self._cfg.moe_all_to_all_dispatcher,
+                moe_aux_loss_coeff=0.001,
+                moe_z_loss_coeff=0.001,
+                use_cpu_initialization=self.do_finetune_with_pretrained_weights and dist.get_rank() == 0,
+            )
+
+        if self._cfg.moe and self._cfg.delayed_param and (not load_state_dict_from_rank0 or dist.get_rank() != 0):
+            with init_empty_weights():
+                return transform(
+                    model,
+                    config=moe_config,
+                    load_state_dict_from_rank0=load_state_dict_from_rank0,
+                )
+        else:
+            # Note: Current tsm transform() function only allows the config param to be used for MoEConfigs.
+            return transform(
+                model,
+                config=moe_config,
+                load_state_dict_from_rank0=load_state_dict_from_rank0,
+            )
 
     def _setup_delayed_param(self, model_cfg):
         if not self._cfg.delayed_param:

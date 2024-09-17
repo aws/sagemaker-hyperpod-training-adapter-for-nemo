@@ -1,3 +1,4 @@
 from .sagemaker_gptneox_model import SageMakerGPTNeoXModel
 from .sagemaker_llama_model import SageMakerLlamaModel
 from .sagemaker_mistral_model import SageMakerMistralModel
+from .sagemaker_mixtral_model import SageMakerMixtralModel

@@ -1,19 +1,19 @@
-from transformers import MistralConfig
+from transformers import MixtralConfig
 
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
 
 
-class SageMakerMistralModel(SageMakerNLPBaseModel):
+class SageMakerMixtralModel(SageMakerNLPBaseModel):
     """
-    Lightning Model class for Mistral
+    Lightning Model class for Mixtral
     """
 
     def get_model_config(self):
         """
-        Get model config for Mistral
+        Get model config for Mixtral
         TODO: Implement Autoconfig in parent class, so Cx can init with only given a HF model name
         """
-        model_config = MistralConfig(
+        model_config = MixtralConfig(
             vocab_size=self._cfg.vocab_size,
             hidden_size=self._cfg.hidden_width,
             intermediate_size=self._cfg.intermediate_size,
@@ -29,8 +29,13 @@ class SageMakerMistralModel(SageMakerNLPBaseModel):
             bos_token_id=1,
             eos_token_id=2,
             tie_word_embeddings=False,
-            rope_theta=10000.0,
-            sliding_window=self._cfg.mistral_sliding_window,
+            rope_theta=self._cfg.rope_theta,
+            sliding_window=self._cfg.mixtral_sliding_window,
             attention_dropout=0.0,
+            num_experts_per_tok=self._cfg.num_experts_per_tok,
+            num_local_experts=self._cfg.num_local_experts,
+            output_router_logits=False,
+            router_aux_loss_coef=0.001,
+            delayed_param=self._cfg.delayed_param,
         )
         return model_config

@@ -20,14 +20,14 @@ class HuggingFacePretrainingDataset:
         self._dataset = None
         datasets = []
         if isinstance(self.input_path, str):
-            datasets.append(self.fetech_dataset(self.input_path))
+            datasets.append(self.fetch_dataset(self.input_path))
         else:
             for p in self.input_path:
-                datasets.append(self.fetech_dataset(p))
+                datasets.append(self.fetch_dataset(p))
         # Combine all datasets into single one.
         self._dataset = interleave_datasets(datasets, seed=_SEED)
 
-    def fetech_dataset(self, path):
+    def fetch_dataset(self, path):
         match self.data_format:
             case DataTypes.ARROW:
                 dataset = load_from_disk(path)
@@ -53,7 +53,7 @@ class HuggingFacePretrainingDataset:
         files = []
         for p in path:
             files += [f for f in Path(p).iterdir() if f.is_file()]
-        suffixes_list = list(set([Path(f).suffixes[0] for f in files]))
+        suffixes_list = list(set(["".join(Path(f).suffixes) for f in files]))
         if any(suffix == DataTypes.ARROW for suffix in suffixes_list):
             return DataTypes.ARROW
 
