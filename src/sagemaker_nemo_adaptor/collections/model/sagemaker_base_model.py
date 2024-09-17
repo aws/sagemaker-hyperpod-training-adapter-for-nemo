@@ -82,11 +82,13 @@ class SageMakerNLPBaseModel(ModelPT):
                 model_cfg.use_cache = False
         else:
             model_cfg = self.get_model_config()
-        model = self._setup_delayed_param(model_cfg)
+        model = self._initialize_model(model_cfg)
         if self.do_finetune_with_pretrained_weights:
             dist.barrier()
         if self.use_smp:
             self.model = self._transform(model)
+        else:
+            self.model = model
         self.fp8_recipe = self._fp8_delayed_scaling()
 
     def param_init_fn(self, module):
@@ -133,12 +135,15 @@ class SageMakerNLPBaseModel(ModelPT):
                 load_state_dict_from_rank0=load_state_dict_from_rank0,
             )
 
-    def _setup_delayed_param(self, model_cfg):
+    def _initialize_model(self, model_cfg):
         if not self._cfg.delayed_param:
+            # initialize model on host memory
             return self.build_model(model_cfg)
         if self.do_finetune_with_pretrained_weights and dist.get_rank() == 0:
+            # initialize model only on rank 0
             return self.build_model(model_cfg)
         with init_empty_weights():
+            # initialize model on meta device
             return self.build_model(model_cfg)
 
     def build_model(self, model_cfg):
