@@ -66,9 +66,8 @@ BASE CLASSES
 class SageMakerParallelConfig(BaseModel):
     tensor_model_parallel_degree: int = Field(default=1, ge=1)
     expert_model_parallel_degree: int = Field(default=1, ge=1)
-    context_parallel_degree: int = Field(default=1, ge=1)
 
-    @field_validator("tensor_model_parallel_degree", "expert_model_parallel_degree", "context_parallel_degree")
+    @field_validator("tensor_model_parallel_degree", "expert_model_parallel_degree")
     @classmethod
     def validate_tensor_model_parallel_degree(cls, value: int, info: FieldValidationInfo):
         if not is_power_of_two(value):
@@ -150,6 +149,9 @@ class BaseModelConfig(BaseModel):
     )
     limit_all_gathers: bool = True
     use_orig_param: bool = True
+
+    # Parallel degree which can be used w/o smp
+    context_parallel_degree: int = Field(default=1, ge=1)
 
     # Model Architecture
     max_context_width: int = Field(default=4096, ge=1)
