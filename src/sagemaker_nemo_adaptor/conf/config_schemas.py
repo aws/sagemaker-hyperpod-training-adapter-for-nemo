@@ -118,6 +118,7 @@ class BaseModelPeftConfig(BaseModel):
     rank: int = Field(default=32, ge=1)
     alpha: float = Field(default=16.0, ge=0)
     dropout: float = Field(default=0.1, ge=0)
+    target_modules: Optional[list[str]] = None
 
 
 class BaseModelConfig(BaseModel):

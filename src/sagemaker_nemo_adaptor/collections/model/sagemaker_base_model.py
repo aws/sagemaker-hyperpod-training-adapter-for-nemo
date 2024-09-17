@@ -154,7 +154,7 @@ class SageMakerNLPBaseModel(ModelPT):
         )
 
         lora_config = LoraConfig(
-            target_modules="all-linear",
+            target_modules=self._cfg.peft.target_modules or "all-linear",
             # Alpha parameter for LoRA scaling
             lora_alpha=self._cfg.peft.alpha,
             # Dropout probability for LoRA layers
