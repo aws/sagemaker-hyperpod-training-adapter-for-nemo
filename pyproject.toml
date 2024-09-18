@@ -22,4 +22,4 @@ filterwarnings = [
     "ignore::DeprecationWarning:pytorch_lightning.*",
 ]
 [tool.coverage.report]
-fail_under = 50
+fail_under = 60

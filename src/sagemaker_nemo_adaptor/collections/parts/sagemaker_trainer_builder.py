@@ -8,7 +8,6 @@ from pytorch_lightning import Trainer
 from sagemaker_nemo_adaptor.collections.data import (
     DummyDataModule,
     HuggingFaceDataModule,
-    MegatronDataModule,
 )
 from sagemaker_nemo_adaptor.collections.parts import (
     SageMakerDDPStrategy,
@@ -110,7 +109,6 @@ class SageMakerTrainerBuilder:
             return DummyDataModule(self.cfg, trainer)
         if self.cfg.model.data.dataset_type == "hf":
             return HuggingFaceDataModule(self.cfg, trainer)
-        return MegatronDataModule(self.cfg, trainer)
 
     def create_trainer(self, callbacks=None) -> Trainer:
         strategy = self._training_strategy()

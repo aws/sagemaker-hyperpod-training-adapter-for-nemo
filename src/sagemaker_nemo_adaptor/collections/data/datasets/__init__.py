@@ -1,3 +1,2 @@
 from .dummy_dataset import DummyDataset
 from .hf_dataset import HuggingFacePretrainingDataset
-from .megatron_gpt_dataset import build_train_valid_test_datasets
