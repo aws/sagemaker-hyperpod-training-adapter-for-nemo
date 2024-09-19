@@ -11,6 +11,7 @@ from nemo.utils import logging
 from pytorch_lightning.callbacks import Checkpoint
 from torch import Tensor
 from torch.sagemaker import state
+from torch.sagemaker.distributed.checkpoint.s3_filesystem import is_s3_uri
 
 from sagemaker_nemo_adaptor.constants import (
     SageMakerCheckpointType,
@@ -81,7 +82,9 @@ class SageMakerModelCheckpointBase(Checkpoint):
     ):
         """Save one checkpoint using corresponding checkpoint type."""
         checkpoint_io.checkpoint_type = checkpoint_type
-        weights_only = checkpoint_type == SageMakerCheckpointType.FULL
+        weights_only = (
+            checkpoint_type == SageMakerCheckpointType.FULL or checkpoint_type == SageMakerCheckpointType.PEFT
+        )
         trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
 
 
@@ -388,6 +391,41 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
             checkpoint_info.append(self._save_sharded(trainer, checkpoint_dir, monitor_candidates))
         if self._should_save_full(trainer):
             checkpoint_info.append(self._save_full(trainer, checkpoint_dir))
+
+        for checkpoint_type, checkpoint_dir in checkpoint_info:
+            self._save(trainer, checkpoint_io, checkpoint_type, checkpoint_dir)
+
+
+class SageMakerCheckpointPeft(SageMakerCheckpoint):
+    """
+    Class to Support checkpointing for PEFT models.
+    """
+
+    def __init__(self, cfg, *args, **kw):
+        super().__init__(cfg, *args, **kw)
+        self._is_peft = hasattr(cfg.model, "peft") and cfg.model.peft.peft_type is not None
+        assert self._is_peft, "SageMakerCheckpointPeft should only be used for PEFT models"
+        assert not is_s3_uri(self._checkpoint_dir), "PEFT checkpointing does not support saving to S3"
+
+    def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        pass
+
+    def _save_peft(self, trainer: "pl.Trainer", path):
+        path = os.path.join(path, "peft", f"steps_{trainer.global_step}")
+        return SageMakerCheckpointType.PEFT, path
+
+    def _save_checkpoints(self, trainer: "pl.Trainer"):
+        """
+        At each step, we check if we should save Peft checkpoint.
+        """
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        checkpoint_dir = self.checkpoint_dir
+        checkpoint_info = []
+
+        # Note that PEFT checkpoints reuse the configs for saving regular FULL checkpoints
+        if self._should_save_full(trainer):
+            checkpoint_info.append(self._save_peft(trainer, checkpoint_dir))
 
         for checkpoint_type, checkpoint_dir in checkpoint_info:
             self._save(trainer, checkpoint_io, checkpoint_type, checkpoint_dir)

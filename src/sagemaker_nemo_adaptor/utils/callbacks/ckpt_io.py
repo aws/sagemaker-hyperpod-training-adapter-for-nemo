@@ -15,6 +15,9 @@ from sagemaker_nemo_adaptor.utils.callbacks.full_ckpt_io import (
 from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
     SageMakerLocalCheckpointIO,
 )
+from sagemaker_nemo_adaptor.utils.callbacks.peft_ckpt_io import (
+    SageMakerPeftCheckpointIO,
+)
 from sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io import (
     SageMakerShardedCheckpointIO,
 )
@@ -26,10 +29,12 @@ class SageMakerCheckpointIO(CheckpointIO):
         sharded_checkpoint_io = SageMakerShardedCheckpointIO(*a, **kw)
         local_checkpoint_io = SageMakerLocalCheckpointIO(*a, **kw)
         full_checkpoint_io = SageMakerFullCheckpointIO(*a, **kw)
+        peft_checkpoint_io = SageMakerPeftCheckpointIO(*a, **kw)
         self._checkpoint_io = {
             SageMakerCheckpointType.SHARDED: sharded_checkpoint_io,
             SageMakerCheckpointType.LOCAL: local_checkpoint_io,
             SageMakerCheckpointType.FULL: full_checkpoint_io,
+            SageMakerCheckpointType.PEFT: peft_checkpoint_io,
         }
 
     def save_checkpoint(

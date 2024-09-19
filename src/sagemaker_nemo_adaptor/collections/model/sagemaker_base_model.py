@@ -11,7 +11,7 @@ from nemo.core.classes.modelPT import ModelPT
 from omegaconf import open_dict
 from omegaconf.dictconfig import DictConfig
 from packaging import version as pversion
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 from pytorch_lightning import Trainer
 from torch.sagemaker import transform
 from torch.sagemaker.moe.moe_config import MoEConfig
@@ -192,9 +192,21 @@ class SageMakerNLPBaseModel(ModelPT):
         )
 
         model.enable_input_require_grads()
-        model = get_peft_model(model, lora_config)
+
+        checkpoint_dir = self.trainer.strategy.cfg.exp_manager.resume_from_checkpoint
+        if checkpoint_dir is not None:
+            if dist.get_rank() == 0:
+                _logger.debug(f"Model before loading adapter weights: {model}")
+            model = PeftModel.from_pretrained(model, checkpoint_dir, is_trainable=True)
+            if dist.get_rank() == 0:
+                _logger.info(f"Loaded adapter weights from {checkpoint_dir}.")
+                _logger.debug(f"Model after loading adapter weights: {model}")
+        else:
+            model = get_peft_model(model, lora_config)
+
         if dist.get_rank() == 0:
             model.print_trainable_parameters()
+
         return model
 
     def _build_model_from_pretrain(self, model_cfg, torch_dtype=None, quantization_config=None):

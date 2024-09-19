@@ -258,6 +258,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.sharded_model_state_dict
         if typ == SageMakerCheckpointType.FULL:
             return self.full_model_state_dict
+        if typ == SageMakerCheckpointType.PEFT:
+            return self.full_model_state_dict
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def sharded_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
@@ -290,6 +292,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.sharded_optimizer_state_dict(optimizer)
         if typ == SageMakerCheckpointType.FULL:
             return self.full_optimizer_state_dict(optimizer)
+        if typ == SageMakerCheckpointType.PEFT:
+            return self.full_optimizer_state_dict(optimizer)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def load_local_model_state_dict(self, checkpoint):
@@ -321,6 +325,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         if typ == SageMakerCheckpointType.SHARDED:
             return self.load_sharded_model_state_dict(checkpoint)
         if typ == SageMakerCheckpointType.FULL:
+            return self.load_full_model_state_dict(checkpoint)
+        if typ == SageMakerCheckpointType.PEFT:
             return self.load_full_model_state_dict(checkpoint)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
@@ -392,3 +398,28 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         """
         # TODO: add when implementing checkpoint
         return True
+
+    def save_peft_model(self, checkpoint_dir):
+        """
+        Save the FSDP wrapped PEFT model to the specified directory. Note that this method will
+        only save the adapter weights.
+        """
+        logging.info(f"Saving PEFT checkpoint to {checkpoint_dir}")
+        logging.debug(f"Model to save: {self.model}")
+        with FSDP.state_dict_type(
+            self.model,
+            StateDictType.FULL_STATE_DICT,
+            FullStateDictConfig(rank0_only=True, offload_to_cpu=True),
+        ):
+            """
+            Need to extract the PEFT model from the FSDP wrapper to call save_pretrained()
+
+            Example of what the _fsdp_wrapped_module looks like:
+                FullyShardedDataParallel(
+                    (_fsdp_wrapped_module): SageMakerLlamaModel(
+                        (model): PeftModelForCausalLM(
+
+            The model needs to be unwrapped in order to extract the PeftModelForCausalLM
+            """
+            self.model.module.model.save_pretrained(checkpoint_dir)
+            dist.barrier()

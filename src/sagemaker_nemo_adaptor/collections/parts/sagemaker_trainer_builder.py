@@ -18,6 +18,7 @@ try:
     from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import (
         SageMakerCheckpoint,
         SageMakerCheckpointIO,
+        SageMakerCheckpointPeft,
         SageMakerModelCheckpointResilience,
     )
 
@@ -89,6 +90,13 @@ class SageMakerTrainerBuilder:
 
         if SUPPORT_CHECKPOINT:
             exp_manager = self.cfg.exp_manager
+            # PEFT checkpointing callback.
+            if self.cfg.model.peft.peft_type is not None:
+                if self.use_generic_checkpoint:
+                    callbacks.append(SageMakerCheckpointPeft(self.cfg))
+                # If using PEFT, do not use regular checkpoint callbacks as they may fail
+                return callbacks
+
             # Resilience checkpointing callback.
             if self.use_resilience_checkpoint:
                 # If user specify a path to resume, disable auto resume.

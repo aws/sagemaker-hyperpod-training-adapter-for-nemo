@@ -34,6 +34,7 @@ class SageMakerCheckpointType(Enum):
     FULL = auto()
     SHARDED = auto()
     LOCAL = auto()
+    PEFT = auto()
 
 
 class SageMakerMonitorMode(Enum):
