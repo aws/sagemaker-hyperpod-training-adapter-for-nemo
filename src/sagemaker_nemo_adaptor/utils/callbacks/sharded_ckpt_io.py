@@ -1,9 +1,10 @@
-import shutil
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
+import torch.distributed as dist
 import torch.sagemaker.distributed.checkpoint.state_dict_loader as loader
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
+from lightning.fabric.utilities.cloud_io import get_filesystem
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
 
@@ -24,8 +25,8 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
     ) -> None:
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
-        strategy = trainer.strategy
-        saver.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)
+        group = self.app_state.fsdp_process_group
+        saver.maybe_finalize_async_calls(blocking=True, process_group=group)
         if self.app_state.is_fsdp_action_rank:
             saver.async_save(
                 checkpoint,
@@ -49,7 +50,12 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
         return state_dict
 
     def remove_checkpoint(self, path: _PATH) -> None:
-        shutil.rmtree(path, ignore_errors=True)
+        if dist.get_rank() != 0:
+            return
+        fs = get_filesystem(path)
+        if fs.exists(path):
+            fs.rm(path, recursive=True)
+            logging.info(f"Removed checkpoint: {path}")
 
     def teardown(self):
         saver.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)

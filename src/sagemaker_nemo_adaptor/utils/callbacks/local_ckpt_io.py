@@ -1,12 +1,26 @@
+import functools
+import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
+import torch
+import torch.distributed as dist
 import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
+from s3torchconnectorclient._mountpoint_s3_client import S3Exception
+from torch.sagemaker import state
 from torch.sagemaker.distributed.checkpoint.async_utils import AsyncCallsQueue
 from torch.sagemaker.distributed.checkpoint.filesystem import (
-    DistributedFileSystemReader,
+    DistributedFileSystemWriter,
+    path_to_file_system,
+)
+from torch.sagemaker.distributed.checkpoint.s3_filesystem import (
+    S3FileSystem,
+    format_s3_path,
+    is_s3_uri,
+    retry_with_jitter,
 )
 from torch.sagemaker.distributed.checkpoint.state_dict_loader import load
 from torch.sagemaker.distributed.checkpoint.state_dict_utils import init_optim_state
@@ -17,11 +31,36 @@ from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
 )
 
 
+def _subdir():
+    app_state = SageMakerAppState()
+    tp_rank = f"tp{state.tp_rank}"
+    ep_rank = f"ep{state.ep_rank}"
+    fsdp_rank = f"fsdp{dist.get_rank(app_state.fsdp_process_group)}"
+    return "_".join([tp_rank, ep_rank, fsdp_rank])
+
+
+def _subdirs():
+    app_state = SageMakerAppState()
+    for i in range(state.tp_size):
+        for j in range(state.ep_size):
+            for k in range(dist.get_world_size(app_state.fsdp_process_group)):
+                yield f"tp{i}_ep{j}_fsdp{k}"
+
+
 class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.app_state = SageMakerAppState()
         self.queue = AsyncCallsQueue()
+
+    @staticmethod
+    @retry_with_jitter
+    def write_local_metadata(training_step, writer):
+        if writer.is_coordinator:
+            path = writer.fs.concat_path(writer.path, ".local.metadata")
+            with writer.fs.create_stream(path, "wb") as stream:
+                metadata = {"step": training_step}
+                torch.save(metadata, stream)
 
     def save_checkpoint(
         self,
@@ -29,10 +68,18 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         path: _PATH,
         storage_options: Optional[Any] = None,
     ) -> None:
-        self.queue.maybe_finalize_async_calls(blocking=True)
+        trainer = storage_options
+        assert isinstance(trainer, pl.Trainer)
+        self.queue.maybe_finalize_async_calls(blocking=True, skip_sync=True)
+        hook = functools.partial(
+            SageMakerLocalCheckpointIO.write_local_metadata,
+            trainer.global_step,
+        )
+        path = os.path.join(path, _subdir())
+        storage_writer = DistributedFileSystemWriter(path, post_write_hooks=[hook])
         saver.async_save(
             checkpoint,
-            checkpoint_id=path,
+            storage_writer=storage_writer,
             process_group=self.app_state.current_replication_group,
             coordinator_rank=self.app_state.replication_coordinator_rank,
             queue=self.queue,
@@ -47,15 +94,98 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         for optimizer in trainer.optimizers:
             init_optim_state(optimizer, skip_empty_param=True)
         state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
-        load(
-            state_dict=state_dict,
-            process_group=self.app_state.current_replication_group,
-            coordinator_rank=self.app_state.replication_coordinator_rank,
-            storage_reader=DistributedFileSystemReader(path),
-        )
-        self.load_data_module_and_lr_schedulers(trainer, state_dict)
-        logging.info(f"Loaded Local checkpoint")
-        return state_dict
+        device = torch.cuda.current_device()
+        for step, directory in SageMakerLocalCheckpointIO.list_checkpoint_dirs(path):
+            success = self._load(trainer, state_dict, directory)
+            state = step if success else -1
+            tensor = torch.tensor([state], device=device)
+            dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
+            state = tensor.item()
+
+            if state >= 0:
+                # The following line should be always true because all ranks
+                # read all same folders. If the following line raises an
+                # assertion error, the error may be from hardware configuration
+                # such as some compute nodes' mount point is incorrect.
+                assert state == step
+                logging.info(f"Loaded Local checkpoint ({state}, {os.path.dirname(directory)})")
+                return state_dict
+
+        raise FileNotFoundError("No checkpoint be found")
+
+    def _load(self, trainer, state_dict, path):
+        try:
+            load(
+                state_dict=state_dict,
+                checkpoint_id=path,
+                process_group=self.app_state.current_replication_group,
+                coordinator_rank=self.app_state.replication_coordinator_rank,
+            )
+            self.load_data_module_and_lr_schedulers(trainer, state_dict)
+            return True
+        except Exception as e:
+            # TODO: We ignore all exceptions for now. Will add fine-grind
+            # error handling later.
+            logging.warning(f"Load checkpoint fail. error: {e}")
+            return False
+
+    @retry_with_jitter
+    @staticmethod
+    def list_checkpoint_dirs(path):
+        path = Path(path)
+        path = format_s3_path(path) if is_s3_uri(path) else path
+        fs = path_to_file_system(path)
+        dirs = SageMakerLocalCheckpointIO.listdir(fs, path)
+        candidate = []
+        for f in dirs:
+            step = SageMakerLocalCheckpointIO.load_step(fs, f)
+            if step >= 0:
+                candidate.append((step, f))
+
+        candidate.sort(reverse=True)
+        for s, f in candidate:
+            yield s, fs.concat_path(f, _subdir())
+
+    @staticmethod
+    def listdir(fs, path):
+        if isinstance(fs, S3FileSystem):
+            return [f"s3://{f}" for f in fs.fs.listdir(path, detail=False)]
+        return [fs.concat_path(path, f) for f in os.scandir(path)]
+
+    @staticmethod
+    def load_step(fs, root):
+        prev = None
+        for d in _subdirs():
+            file = fs.concat_path(root, d)
+            path = fs.concat_path(file, ".local.metadata")
+            meta = SageMakerLocalCheckpointIO.load_local_metadata(fs, path)
+            step = meta.get("step", -1)
+            if step < 0:
+                return -1
+            if not prev:
+                prev = step
+                continue
+            if prev != step:
+                return -1
+        return step
+
+    @staticmethod
+    @retry_with_jitter
+    def load_local_metadata(fs, file):
+        try:
+            logging.debug(f"Loading local metadata: {file}")
+            with fs.create_stream(file, "rb") as f:
+                return torch.load(f)
+        except S3Exception as e:
+            msg = str(e)
+            if "Service error: The key does not exist" in msg:
+                return {}
+            if "Service error: The bucket does not exist" in msg:
+                return {}
+            raise
+        except Exception as e:
+            logging.warning(f"torch.load({file}) fail. error: {e}")
+            return {}
 
     def remove_checkpoint(self, path: _PATH) -> None:
         raise NotImplementedError("SageMakerLocalCheckpointIO.remove_checkpoint not implemented")

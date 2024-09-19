@@ -73,6 +73,9 @@ class SageMakerCheckpointIO(CheckpointIO):
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
         return self._checkpoint_io[typ].remove_checkpoint(path)
 
+    def __getitem__(self, typ: SageMakerCheckpointType) -> CheckpointIO:
+        return self._checkpoint_io[typ]
+
     @property
     def checkpoint_type(self):
         return self._checkpoint_type
