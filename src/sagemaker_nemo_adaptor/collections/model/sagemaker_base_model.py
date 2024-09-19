@@ -14,10 +14,13 @@ from packaging import version as pversion
 from peft import LoraConfig, PeftModel, get_peft_model
 from pytorch_lightning import Trainer
 from torch.sagemaker import transform
+from torch.sagemaker.context_parallel.utils import setup_transformer_engine_cp_groups
 from torch.sagemaker.moe.moe_config import MoEConfig
+from torch.sagemaker.utils.process_group_utils import get_global_ranks
 from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
+from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 from sagemaker_nemo_adaptor.utils.train_utils import get_batch_for_cp_rank
 
@@ -71,7 +74,15 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         return self.do_finetune and self._cfg.get("resume_from_checkpoint", None) is None
 
+    @property
+    def do_patch_attn_context_parallel(self):
+        # support non-SMP context parallel usage.
+        # this is mostly for llama 405b QLoRA CP.
+        return not self.use_smp and self._cfg.get("context_parallel_degree", 1) > 1
+
     def setup(self, *a, **kw):
+        if self.do_patch_attn_context_parallel:
+            patch_llama_flash_attn_cp.apply_patch()
         if self.do_finetune:
             from transformers import AutoConfig
 
@@ -83,6 +94,15 @@ class SageMakerNLPBaseModel(ModelPT):
         else:
             model_cfg = self.get_model_config()
         model = self._initialize_model(model_cfg)
+        if self.do_patch_attn_context_parallel:
+            # check that we are using patched attention for context parallel
+            assert any(
+                [submodule.__module__ == "transformer_engine.pytorch.attention" for submodule in model.modules()]
+            ), "This model does not support context parallel with use_smp=False."
+            # setup TransformerEngine CP groups
+            setup_transformer_engine_cp_groups(
+                model, get_global_ranks(tsm.state.cp_process_group), tsm.state.cp_process_group
+            )
         if self.do_finetune_with_pretrained_weights:
             dist.barrier()
         if self.use_smp:
@@ -164,12 +184,19 @@ class SageMakerNLPBaseModel(ModelPT):
         os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
 
         if self._cfg.peft.peft_type == "qlora_4bit":
+            if self.do_patch_attn_context_parallel:
+                # if patching attention with TransformerEngine CP, HF crashes on get_keys_to_not_convert.
+                # instead, specify llm_int8_skip_modules, to bypass get_keys_to_not_convert function.
+                llm_int8_skip_modules = ["lm_head"]
+            else:
+                llm_int8_skip_modules = None
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_quant_storage=torch.bfloat16,
+                llm_int8_skip_modules=llm_int8_skip_modules,
             )
         else:
             quantization_config = None
