@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple, Union
 
 import torch
 from datasets import interleave_datasets, load_dataset, load_from_disk
@@ -13,7 +13,7 @@ _SEED = 123
 
 
 class HuggingFacePretrainingDataset:
-    def __init__(self, input_path: str, partition: str = "train"):
+    def __init__(self, input_path: Union[str, List[str]], partition: str = "train"):
         self.input_path = input_path
         self.partition = partition
         self.data_format = self._get_data_format(self.input_path)

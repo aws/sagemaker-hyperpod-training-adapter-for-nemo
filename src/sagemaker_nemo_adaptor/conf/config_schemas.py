@@ -97,8 +97,8 @@ class BaseModelOptimizerConfig(BaseModel):
 
 
 class BaseModelDataConfig(BaseModel):
-    train_dir: Optional[list[str]] = None
-    val_dir: Optional[list[str]] = None
+    train_dir: Optional[Union[str, list[str]]] = None
+    val_dir: Optional[Union[str, list[str]]] = None
     dataset_type: Literal["hf", "synthetic"] = "hf"
     use_synthetic_data: bool = False
     zipped_data: bool = False  # TODO: ideally we should have utils to check whether a data is zipped

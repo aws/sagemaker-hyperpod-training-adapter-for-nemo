@@ -20,19 +20,18 @@ class HuggingFaceDataModule(BaseDataModule):
         super().__init__(cfg=cfg, trainer=trainer, collate_fn=default_data_collator)
 
     def train_dataloader(self):
-        trainset = HuggingFacePretrainingDataset(input_path=self.cfg.model.data.train_dir)
+        input_path = self.cfg.model.data.train_dir
+        trainset = HuggingFacePretrainingDataset(input_path=input_path, partition="train")
         self._train_ds = trainset.dataset
-
         return self._build_dataloader(self._train_ds)
 
     def val_dataloader(self):
-        if self.cfg.model.data.val_dir:
-            valset = HuggingFacePretrainingDataset(input_path=self.cfg.model.data.val_dir, partition="val")
-            self._validation_ds = valset.dataset
-
-            return self._build_dataloader(self._validation_ds)
-        else:
+        val_dir = self.cfg.model.data.val_dir
+        if not val_dir:
             return None
+        valset = HuggingFacePretrainingDataset(input_path=val_dir, partition="val")
+        self._validation_ds = valset.dataset
+        return self._build_dataloader(self._validation_ds)
 
     def get_batch(self, data):
         return data["input_ids"], data["attention_mask"], data["labels"]
