@@ -32,12 +32,19 @@ def get_backward_fetch_policy(policy: str):
     return backward_fetch_policy
 
 
-def get_auto_wrap_policy(policy: str, transformer_layer=None):
+def get_auto_wrap_policy(policy: str, transformer_layer=None, use_peft=False):
     """Get auto wrap policy"""
-    if policy == "transformer_auto_wrap_policy":
+    if use_peft:
         # to support PEFT, create policy which wraps transformer layers, but also wraps
         # linear layers (lambda_policy_fn) and other PEFT layers.
-        # this should still work for non-PEFT use cases.
+        # when using PEFT, the original model's frozen parameters are low precision,
+        # but the PEFT adapter weights are full fp32 precision. Therefore, the PEFT
+        # adapter layers must be wrapped separately from frozen layers, to avoid FSDP errors:
+        # "ValueError: Must flatten tensors with uniform dtype but got torch.bfloat16 and torch.float32"
+        assert (
+            policy == "transformer_auto_wrap_policy"
+        ), f"PEFT requires 'transformer_auto_wrap_policy' but got '{policy}'"
+
         def lambda_policy_fn(module):
             if (
                 not list(module.named_children())
@@ -59,14 +66,20 @@ def get_auto_wrap_policy(policy: str, transformer_layer=None):
         )
 
         return functools.partial(_or_policy, policies=[lambda_policy, transformer_wrap_policy])
-    elif policy == "size_based_auto_wrap_policy":
-        return functools.partial(
-            size_based_auto_wrap_policy,
-        )
     else:
-        raise NotImplementedError(
-            f"{policy} is not a valid auto wrap policy, supported policies are: [transformer_auto_wrap_policy, size_based_auto_wrap_policy]"
-        )
+        if policy == "transformer_auto_wrap_policy":
+            return functools.partial(
+                transformer_auto_wrap_policy,
+                transformer_layer_cls=(transformer_layer,),
+            )
+        elif policy == "size_based_auto_wrap_policy":
+            return functools.partial(
+                size_based_auto_wrap_policy,
+            )
+        else:
+            raise NotImplementedError(
+                f"{policy} is not a valid auto wrap policy, supported policies are: [transformer_auto_wrap_policy, size_based_auto_wrap_policy]"
+            )
 
 
 def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):

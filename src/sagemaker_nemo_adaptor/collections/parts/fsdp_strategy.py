@@ -120,7 +120,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         use_smp = self.use_smp
         cfg = self.cfg.model
         transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
-        auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer)
+        auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer, model.use_peft)
         mixed_precision_policy = set_mixed_precision_recipe(
             precision=cfg.precision,
             use_smp=use_smp,
