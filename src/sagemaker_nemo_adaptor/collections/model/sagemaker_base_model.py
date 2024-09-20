@@ -40,6 +40,7 @@ class SageMakerNLPBaseModel(ModelPT):
         self._cfg = cfg
         self.model = None
         self.use_smp = use_smp
+        self.model_config = None
 
         # Setup Transformer Engine Variable TODO: move it inside smp library
         os.environ["NVTE_TORCH_COMPILE"] = "0"
@@ -87,13 +88,13 @@ class SageMakerNLPBaseModel(ModelPT):
             from transformers import AutoConfig
 
             # Using config from the pretrained model
-            model_cfg = AutoConfig.from_pretrained(self._cfg.pretrained_model_name_or_path)
+            self.model_config = AutoConfig.from_pretrained(self._cfg.pretrained_model_name_or_path)
             # Disable KV cache for HF models
-            if hasattr(model_cfg, "use_cache"):
-                model_cfg.use_cache = False
+            if hasattr(self.model_config, "use_cache"):
+                self.model_config.use_cache = False
         else:
-            model_cfg = self.get_model_config()
-        model = self._initialize_model(model_cfg)
+            self.model_config = self.get_model_config()
+        model = self._initialize_model(self.model_config)
         if self.do_patch_attn_context_parallel:
             # check that we are using patched attention for context parallel
             assert any(

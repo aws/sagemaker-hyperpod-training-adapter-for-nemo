@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,4 +42,6 @@ class TestSageMakerFullCheckpointIO:
 
         with patch.object(TorchCheckpointIO, "save_checkpoint") as mock_super_save_checkpoint:
             checkpoint_io.save_checkpoint(checkpoint, path, storage_options)
-            mock_super_save_checkpoint.assert_called_once_with(checkpoint, path)
+            mock_super_save_checkpoint.assert_called_once_with(
+                checkpoint["state_dict"], os.path.join(path, "pytorch_model.bin")
+            )

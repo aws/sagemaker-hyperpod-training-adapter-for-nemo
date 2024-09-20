@@ -74,7 +74,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.use_smp = cfg.use_smp
         self.smp_config_dict = self._setup_smp_config(cfg)
         self.app_state = SageMakerAppState()
-        self._model_prefix = ""
 
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
@@ -111,9 +110,13 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.app_state.replication_coordinator_rank = replication_coordinator_rank
         self.app_state.current_replication_group = current_replication_group
 
+    @property
+    def pytorch_model(self):
+        # FSDP wrapped model.
+        return self.model.model if self.model else None
+
     def _setup_model(self, model):
         # retrieve the root module name of the model which is the first one.
-        self._model_prefix = list(model._modules.keys())[0]
         use_smp = self.use_smp
         cfg = self.cfg.model
         transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
@@ -131,8 +134,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             model_context,
             tsm_utils.timeit(True, "FSDP constructor", self.global_rank),
         ):
-            model = FSDP(
-                module=model,
+            pytorch_model = FSDP(
+                module=model.model,
                 auto_wrap_policy=auto_wrap_policy,
                 mixed_precision=mixed_precision_policy,
                 sharding_strategy=sharding_strategy,
@@ -145,23 +148,23 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 post_param_init_fn=post_param_init_fn,
                 sync_module_states=model.do_finetune_with_pretrained_weights,
             )
-            self._record_fsdp_process_group(model)
+            self._record_fsdp_process_group(pytorch_model)
             self._record_replication_process_group()
 
         if cfg.activation_checkpointing:
             apply_activation_checkpoint(
-                model=model,
+                model=pytorch_model,
                 model_type=cfg.model_type,
                 use_smp=use_smp,
                 fp8=cfg.fp8,
                 moe=cfg.moe,
             )
         if cfg.offload_activations:
-            model = offload_wrapper(model)
+            pytorch_model = offload_wrapper(pytorch_model)
             if cfg.model_type == "gpt_neox" and cfg.patch_neox_rope:
                 # TODO: add a check to the model type and use enum for it
-                patch_neox_rope(model)
-
+                patch_neox_rope(pytorch_model)
+        model.model = pytorch_model
         return model
 
     def _setup_delayed_param(self, cfg, model):
@@ -202,10 +205,10 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def setup(self, trainer: "pl.Trainer") -> None:
         super(NLPFSDPStrategy, self).setup(trainer)
-        logging.info(f"Training Model:\n{self.model}")
+        logging.info(f"Training Model:\n{self.pytorch_model}")
 
     def optimizer_step(self, *a, **kw):
-        grad_norm = clip_grad_norm_(self.model, self.cfg.model.grad_clip)
+        grad_norm = clip_grad_norm_(self.pytorch_model, self.cfg.model.grad_clip)
         logging.debug(f"grad_norm: {grad_norm}")
         super().optimizer_step(*a, **kw)
 
@@ -232,19 +235,19 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     @property
     def sharded_model_state_dict(self):
-        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
-            return self.model.state_dict()
+        with FSDP.state_dict_type(self.pytorch_model, StateDictType.SHARDED_STATE_DICT):
+            return self.pytorch_model.state_dict()
 
     @property
     def local_model_state_dict(self):
-        with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
-            return self.model.state_dict()
+        with sm_state_dict_type(self.pytorch_model, SMStateDictType.SM_LOCAL_STATE_DICT):
+            return self.pytorch_model.state_dict()
 
     @property
     def full_model_state_dict(self):
         state_dict_config = FullStateDictConfig(rank0_only=True, offload_to_cpu=True)
-        with sm_state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
-            return self.model.state_dict()
+        with sm_state_dict_type(self.pytorch_model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
+            return self.pytorch_model.state_dict()
 
     def lightning_module_state_dict(self) -> Dict[str, Any]:
         """
@@ -266,19 +269,19 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # TODO: Turn off optimizer offload_to_cpu? i.e., offload_to_cpu=False.
         #       We are unable to set offload_to_cpu=False now bc many features
         #       are still not applied.
-        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
-            return FSDP.optim_state_dict(self.model, optimizer)
+        with FSDP.state_dict_type(self.pytorch_model, StateDictType.SHARDED_STATE_DICT):
+            return FSDP.optim_state_dict(self.pytorch_model, optimizer)
 
     def local_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
-        with sm_state_dict_type(self.model, SMStateDictType.SM_LOCAL_STATE_DICT):
+        with sm_state_dict_type(self.pytorch_model, SMStateDictType.SM_LOCAL_STATE_DICT):
             return optimizer.state_dict()
 
     def full_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
         optim_state_dict_config = FullOptimStateDictConfig(rank0_only=True, offload_to_cpu=True)
         with sm_state_dict_type(
-            self.model, StateDictType.FULL_STATE_DICT, optim_state_dict_config=optim_state_dict_config
+            self.pytorch_model, StateDictType.FULL_STATE_DICT, optim_state_dict_config=optim_state_dict_config
         ):
-            return FSDP.optim_state_dict(self.model, optimizer)
+            return FSDP.optim_state_dict(self.pytorch_model, optimizer)
 
     def optimizer_state(self, optimizer: torch.optim.Optimizer) -> Dict[str, torch.Tensor]:
         """
@@ -301,21 +304,14 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def load_sharded_model_state_dict(self, checkpoint):
         assert "state_dict" in checkpoint, "Missing model 'state_dict'"
-        with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT):
-            state_dict = checkpoint["state_dict"]
-            # ref:
-            #   * save hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L142
-            #   * load hook: https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/pt-2.3-tsm-2.5/torch/sagemaker/tensor_parallel/transform_policy.py#L198
-            # tp info needs to be prefixed with model prefixed, or the key will be dropped.
-            state_dict[f"{self._model_prefix}.{SMP_IS_LOAD_INFO_KEY}"] = state_dict.pop(SMP_IS_LOAD_INFO_KEY)
-            state_dict[f"{self._model_prefix}.{SMP_IS_PARTIAL_KEY}"] = state_dict.pop(SMP_IS_PARTIAL_KEY)
-            self.model.load_state_dict(checkpoint["state_dict"])
+        with FSDP.state_dict_type(self.pytorch_model, StateDictType.SHARDED_STATE_DICT):
+            self.pytorch_model.load_state_dict(checkpoint["state_dict"])
 
     def load_full_model_state_dict(self, checkpoint):
         assert "state_dict" in checkpoint, "Missing model 'state_dict'"
         state_dict_config = FullStateDictConfig(rank0_only=True, offload_to_cpu=True)
-        with sm_state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
-            self.model.load_state_dict(checkpoint["state_dict"])
+        with sm_state_dict_type(self.pytorch_model, StateDictType.FULL_STATE_DICT, state_dict_config=state_dict_config):
+            self.pytorch_model.load_state_dict(checkpoint["state_dict"])
 
     def load_model_state_dict(self, checkpoint: Mapping[str, Any], strict=None) -> None:
         assert isinstance(self.checkpoint_io, SageMakerCheckpointIO)
@@ -339,7 +335,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 storage_reader=DistributedFileSystemReader(path),
             )
             flattened_osd = FSDP.optim_state_dict_to_load(
-                model=self.model, optim=optimizer, optim_state_dict=state_dict[optimizer_key]
+                model=self.pytorch_model, optim=optimizer, optim_state_dict=state_dict[optimizer_key]
             )
             optimizer.load_state_dict(flattened_osd)
 
@@ -405,9 +401,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         only save the adapter weights.
         """
         logging.info(f"Saving PEFT checkpoint to {checkpoint_dir}")
-        logging.debug(f"Model to save: {self.model}")
+        logging.debug(f"Model to save: {self.pytorch_model}")
         with FSDP.state_dict_type(
-            self.model,
+            self.pytorch_model,
             StateDictType.FULL_STATE_DICT,
             FullStateDictConfig(rank0_only=True, offload_to_cpu=True),
         ):
@@ -416,10 +412,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
             Example of what the _fsdp_wrapped_module looks like:
                 FullyShardedDataParallel(
-                    (_fsdp_wrapped_module): SageMakerLlamaModel(
-                        (model): PeftModelForCausalLM(
+                    (_fsdp_wrapped_module): PeftModelForCausalLM(
 
             The model needs to be unwrapped in order to extract the PeftModelForCausalLM
             """
-            self.model.module.model.save_pretrained(checkpoint_dir)
+            self.pytorch_model.module.save_pretrained(checkpoint_dir)
             dist.barrier()
