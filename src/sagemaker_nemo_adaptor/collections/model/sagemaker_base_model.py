@@ -94,6 +94,8 @@ class SageMakerNLPBaseModel(ModelPT):
                 self.model_config.use_cache = False
         else:
             self.model_config = self.get_model_config()
+        # Adding delayed_param config to HF model config
+        self.model_config.delayed_param = self._cfg.delayed_param
         model = self._initialize_model(self.model_config)
         if self.do_patch_attn_context_parallel:
             # check that we are using patched attention for context parallel
