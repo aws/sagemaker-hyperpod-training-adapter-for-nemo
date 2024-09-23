@@ -1,3 +1,4 @@
+import math
 import os
 from copy import deepcopy
 from dataclasses import dataclass
@@ -172,13 +173,16 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         self._resume_from_checkpoint = cfg.exp_manager.get("resume_from_checkpoint", None)
         # Full checkpoint
         self._save_full_every_n_steps = None
+        self._save_last_full = None
         if "export_full_model" in cfg.exp_manager:
             self._save_full_every_n_steps = cfg.exp_manager.export_full_model.get("every_n_train_steps", None)
+            self._save_last_full = cfg.exp_manager.export_full_model.get("save_last", True)
         # Sharded checkpoint
         checkpoint_callback_params = {}
         if "checkpoint_callback_params" in cfg.exp_manager:
             checkpoint_callback_params = cfg.exp_manager.checkpoint_callback_params
         self._save_sharded_every_n_steps = checkpoint_callback_params.get("every_n_train_steps", None)
+        self._save_last_sharded = cfg.exp_manager.export_full_model.get("save_last", True)
         self._save_top_k = checkpoint_callback_params.get("save_top_k", None)
         self._monitor = checkpoint_callback_params.get("monitor", "step")
         mode = checkpoint_callback_params.get("mode", "max")
@@ -204,13 +208,14 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         """
         Check if the full checkpoint should be saved if:
         1. hit every n steps defined by save_full_every_n_steps.
-        2. reach max steps. ie: traininig finishes.
+        2. reach max steps if export_full_model.save_last = True.
         """
+        is_last_step = trainer.max_steps == trainer.global_step
+        if self._save_last_full and is_last_step:
+            return True
         if not self._save_full_every_n_steps:
             return False
-        is_every_n = trainer.global_step % self._save_full_every_n_steps == 0
-        is_last_step = trainer.max_steps == trainer.global_step
-        return is_every_n or is_last_step
+        return trainer.global_step % self._save_full_every_n_steps == 0
 
     def _should_save_sharded(self, trainer: "pl.Trainer", monitor_candidates):
         """
@@ -219,12 +224,11 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         2. Have the value in metric logged
         3. The new score is better.
         """
-
-        if not self._save_sharded_every_n_steps or self._save_top_k < 1:
-            return False
-
+        save_last_step = trainer.max_steps == trainer.global_step and self._save_last_sharded
+        is_sharded_on = self._save_sharded_every_n_steps and self._save_top_k >= 1
         is_every_n = trainer.global_step % self._save_sharded_every_n_steps == 0
-        if not is_every_n:
+        # Neither saving last step nor every n step is needed.
+        if not save_last_step and not (is_sharded_on and is_every_n):
             return False
         has_value = self._monitor in monitor_candidates
         if not has_value:
@@ -238,8 +242,12 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
 
         # Check if it hits topk capacity. if hits, check if it is one of the topk.
         is_top_k = len(self._best_k_models) < self._save_top_k
+        lowest = -math.inf if self._mode == SageMakerMonitorMode.MAX else math.inf
         if len(self._best_k_models) == self._save_top_k and has_value:
-            lowest = self._best_k_models[-1].score
+            if len(self._best_k_models):
+                lowest = self._best_k_models[-1].score
+            else:
+                lowest = -math.inf if self._mode == SageMakerMonitorMode.MAX else math.inf
             is_top_k = (
                 lowest < monitor_candidates[self._monitor]
                 if self._mode == SageMakerMonitorMode.MAX
@@ -310,7 +318,8 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
             epoch_at_save=trainer.current_epoch,
         )
         checkpoint_io = trainer.strategy.checkpoint_io
-        self._update_topk(new_checkpoint, checkpoint_io)
+        if trainer.max_steps != trainer.global_step:
+            self._update_topk(new_checkpoint, checkpoint_io)
         return SageMakerCheckpointType.SHARDED, sharded_checkpoint_dir
 
     def _save_checkpoints(self, trainer: "pl.Trainer"):

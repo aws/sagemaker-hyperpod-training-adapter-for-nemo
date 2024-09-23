@@ -68,8 +68,15 @@ class SageMakerTrainerBuilder:
 
     @property
     def use_generic_checkpoint(self):
-        export_sharded = self.cfg.exp_manager.checkpoint_callback_params.get("save_top_k", 0) != 0
-        export_full = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0
+        # Sharded checkpoint.
+        sharded_save_any = self.cfg.exp_manager.checkpoint_callback_params.get("save_top_k", 0) != 0
+        sharded_save_last = self.cfg.exp_manager.checkpoint_callback_params.get("save_last", True)
+        export_sharded = sharded_save_any or sharded_save_last
+
+        # Full checkpoint
+        full_save_any = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0
+        full_save_last = self.cfg.exp_manager.export_full_model.get("save_last", True)
+        export_full = full_save_any or full_save_last
         return export_sharded or export_full
 
     @property

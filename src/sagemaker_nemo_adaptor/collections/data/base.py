@@ -7,7 +7,11 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.core.datamodule import LightningDataModule
 from torch.utils.data import DataLoader
 
-from sagemaker_nemo_adaptor.constants import TRAIN_SEQUENCE_NUMBER, VAL_SEQUENCE_NUMBER
+from sagemaker_nemo_adaptor.constants import (
+    DEFAULT_SEED,
+    TRAIN_SEQUENCE_NUMBER,
+    VAL_SEQUENCE_NUMBER,
+)
 from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
 
@@ -32,6 +36,10 @@ class BaseDataModule(LightningDataModule):
         self.dp_size = app_state.data_parallel_size
         self.dp_rank = app_state.data_parallel_rank
 
+    @property
+    def seed(self):
+        return self.cfg.model.seed if self.cfg.model.seed else DEFAULT_SEED
+
     def _build_dataloader(
         self,
         dataset,
@@ -47,7 +55,7 @@ class BaseDataModule(LightningDataModule):
         sampler = torch.utils.data.DistributedSampler(
             dataset,
             shuffle=shuffle,
-            seed=self.cfg.model.seed,
+            seed=self.seed,
             rank=self.dp_rank,
             num_replicas=self.dp_size,
             drop_last=True,
@@ -74,7 +82,7 @@ class BaseDataModule(LightningDataModule):
 
     def state_dict(self):
         """Generate state_dict to save during checkpoint."""
-        state_dict = {}
+        state_dict = {"seed": self.seed}
         if self.trainer.train_dataloader:
             state_dict[TRAIN_SEQUENCE_NUMBER] = self._retrieve_squence_index(self.trainer.train_dataloader)
 
@@ -103,23 +111,23 @@ class BaseDataModule(LightningDataModule):
         """
         Load the state_dict into dataloaders if they exist.
         """
-        assert self.__class__.__qualname__ in state_dict, f"{self.__class__.__qualname__} is not in state_dict"
+        class_name = self.__class__.__qualname__
+        assert class_name in state_dict, f"{class_name} is not in state_dict"
+
+        seed = state_dict[class_name].get("seed", None)
+        assert seed == self.seed, f"Seed in state_dict[{class_name}] is {seed} but current seed is {self.seed}"
 
         if self.trainer.train_dataloader:
             assert (
-                TRAIN_SEQUENCE_NUMBER in state_dict[self.__class__.__qualname__]
-            ), f"Could not find {TRAIN_SEQUENCE_NUMBER} is not in state_dict[{self.__class__.__qualname__}]"
-            self._resume_squence_index(
-                state_dict[self.__class__.__qualname__][TRAIN_SEQUENCE_NUMBER], self.trainer.train_dataloader
-            )
+                TRAIN_SEQUENCE_NUMBER in state_dict[class_name]
+            ), f"Could not find {TRAIN_SEQUENCE_NUMBER} is not in state_dict[{class_name}]"
+            self._resume_squence_index(state_dict[class_name][TRAIN_SEQUENCE_NUMBER], self.trainer.train_dataloader)
 
         if self.trainer.val_dataloaders:
             assert (
-                VAL_SEQUENCE_NUMBER in state_dict[self.__class__.__qualname__]
-            ), f"Could not find {VAL_SEQUENCE_NUMBER} is not in state_dict[{self.__class__.__qualname__}]"
-            self._resume_squence_index(
-                state_dict[self.__class__.__qualname__][VAL_SEQUENCE_NUMBER], self.trainer.val_dataloaders
-            )
+                VAL_SEQUENCE_NUMBER in state_dict[class_name]
+            ), f"Could not find {VAL_SEQUENCE_NUMBER} is not in state_dict[{class_name}]"
+            self._resume_squence_index(state_dict[class_name][VAL_SEQUENCE_NUMBER], self.trainer.val_dataloaders)
 
     def get_batch(self, data):
         """

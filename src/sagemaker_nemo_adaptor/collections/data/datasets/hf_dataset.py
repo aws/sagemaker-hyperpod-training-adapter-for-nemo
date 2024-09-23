@@ -5,11 +5,10 @@ from typing import List, Tuple, Union
 import torch
 from datasets import interleave_datasets, load_dataset, load_from_disk
 
-from sagemaker_nemo_adaptor.constants import DataTypes
+from sagemaker_nemo_adaptor.constants import DEFAULT_SEED, DataTypes
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
-_SEED = 123
 
 
 class HuggingFacePretrainingDataset:
@@ -25,7 +24,7 @@ class HuggingFacePretrainingDataset:
             for p in self.input_path:
                 datasets.append(self.fetch_dataset(p))
         # Combine all datasets into single one.
-        self._dataset = interleave_datasets(datasets, seed=_SEED)
+        self._dataset = interleave_datasets(datasets, seed=DEFAULT_SEED)
 
     def fetch_dataset(self, path):
         match self.data_format:

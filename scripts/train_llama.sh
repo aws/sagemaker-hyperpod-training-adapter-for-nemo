@@ -56,5 +56,4 @@ $TORCH_CMD \
     --nproc_per_node="${GPU_NUM_DEVICES}" \
     llama_pretrain.py \
     "trainer.num_nodes=${NNODES}" \
-    "trainer.devices=${GPU_NUM_DEVICES}" \
-    "exp_manager.exp_dir=/fsx/users/${USER}/exp/"
+    "trainer.devices=${GPU_NUM_DEVICES}"

@@ -29,6 +29,7 @@ from sagemaker_nemo_adaptor.utils.get_rank import is_global_rank_zero
 @dataclass
 class SageMakerExportFullModel(CallbackParams):
     every_n_train_steps = 0
+    save_last = True
 
 
 @dataclass

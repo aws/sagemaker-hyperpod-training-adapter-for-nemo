@@ -20,17 +20,19 @@ exp_manager:
   create_checkpoint_callback: False
   checkpoint_callback_params:
     # Set save_top_k = 0 to disable sharded checkpointing
-    save_top_k: 10
+    save_top_k: 0
     every_n_train_steps: 10
     monitor: "step"
     mode: "max"
+    save_last: True
   checkpoint_dir: ${exp_manager.exp_dir}/checkpoints/
   resume_from_checkpoint: null
   # Set auto_checkpoint = False to disable auto resilience checkpointing
-  auto_checkpoint: True
+  auto_checkpoint: False
   export_full_model:
     # Set every_n_train_steps = 0 to disable full checkpointing
-    every_n_train_steps: 10
+    every_n_train_steps: 0
+    save_last: True
 
 use_smp: True #enable smp
 distributed_backend: nccl

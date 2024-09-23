@@ -246,10 +246,12 @@ class BaseCheckpointCallbackConfig(BaseModel):
     every_n_train_steps: int = Field(default=0, ge=0)
     monitor: str = "step"
     mode: str = Field(default=SageMakerMonitorMode.MAX.value)
+    save_last: bool = True
 
 
 class BaseExportFullModelConfig(BaseModel):
     every_n_train_steps: int = Field(default=0, ge=0)
+    save_last: bool = True
 
 
 class BaseExpManager(BaseModel):
