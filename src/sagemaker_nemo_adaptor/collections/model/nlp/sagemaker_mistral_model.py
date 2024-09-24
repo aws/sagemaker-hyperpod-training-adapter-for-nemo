@@ -1,6 +1,7 @@
 from transformers import MistralConfig
 
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
+from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
 
 
 class SageMakerMistralModel(SageMakerNLPBaseModel):
@@ -8,29 +9,30 @@ class SageMakerMistralModel(SageMakerNLPBaseModel):
     Lightning Model class for Mistral
     """
 
+    predefined_model = True
+
     def get_model_config(self):
         """
         Get model config for Mistral
-        TODO: Implement Autoconfig in parent class, so Cx can init with only given a HF model name
         """
-        model_config = MistralConfig(
-            vocab_size=self._cfg.vocab_size,
-            hidden_size=self._cfg.hidden_width,
-            intermediate_size=self._cfg.intermediate_size,
-            num_hidden_layers=self._cfg.num_layers,
-            num_attention_heads=self._cfg.num_heads,
-            num_key_value_heads=self._cfg.num_key_value_heads,
-            hidden_act="silu",
-            max_position_embeddings=self._cfg.max_context_width,
-            initializer_range=self._cfg.initializer_range,
-            rms_norm_eps=self._cfg.layernorm_epsilon,
-            use_cache=False,
-            pad_token_id=None,
-            bos_token_id=1,
-            eos_token_id=2,
-            tie_word_embeddings=False,
-            rope_theta=10000.0,
-            sliding_window=self._cfg.mistral_sliding_window,
-            attention_dropout=0.0,
-        )
+        configurable_dict = self._get_model_configurable_dict()
+        if self._cfg.get("hf_model_name_or_path", None) is not None:
+            model_config = get_hf_config_from_name_or_path(self._cfg)
+            assert isinstance(
+                model_config, MistralConfig
+            ), f"model_type is set to mistral but hf_model_name_or_path is not the same model, getting {type(model_config)}"
+            # Update the config based on user's input
+            model_config.update(configurable_dict)
+        else:
+            model_config = MistralConfig(
+                **configurable_dict,
+                hidden_act="silu",
+                use_cache=False,
+                pad_token_id=None,
+                bos_token_id=1,
+                eos_token_id=2,
+                tie_word_embeddings=False,
+                rope_theta=10000.0,
+                attention_dropout=0.0,
+            )
         return model_config

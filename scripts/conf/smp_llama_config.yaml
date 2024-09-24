@@ -91,7 +91,7 @@ model:
 
   do_finetune: False
   # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
-  pretrained_model_name_or_path: null # "/fsx/hf_pretrained_models/Meta-Llama-3-8B"
+  hf_model_name_or_path: null # "/fsx/hf_pretrained_models/Meta-Llama-3-8B"
 
   precision: ${trainer.precision}
 

@@ -1,3 +1,4 @@
+import functools
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
@@ -5,11 +6,17 @@ from typing import Any, Dict, Mapping, Optional, Union
 import torch
 import torch.distributed as dist
 import torch.sagemaker as tsm
+from accelerate.utils import FullyShardedDataParallelPlugin
 from lightning_fabric.utilities.types import _PATH
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointImpl,
+    apply_activation_checkpointing,
+    checkpoint_wrapper,
+    offload_wrapper,
+)
 from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import StateDictType
@@ -80,8 +87,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def _setup_smp_config(self, cfg):
         smp_config = {
-            "activation_loading_horizon": cfg.model.activation_loading_horizon,
-            "sm_activation_offloading": cfg.model.offload_activations > 0,
+            "activation_loading_horizon": cfg.model.get("activation_loading_horizon", 2),
+            "sm_activation_offloading": cfg.model.get("offload_activations", False),
             # these parallel degrees are defined only when `use_smp=True`.
             # defaulting to 1 for case when `use_smp=False`:
             # https://tiny.amazon.com/ikqkw3kr/githawsprivblob1bf5srcsage
@@ -90,7 +97,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             "context_parallel_degree": cfg.model.get("context_parallel_degree", 1),
             "random_seed": cfg.model.seed,
         }
-        if cfg.model.shard_degree:
+        if cfg.model.get("shard_degree", None):
             smp_config["hybrid_shard_degree"] = cfg.model.shard_degree
         return smp_config
 
@@ -119,8 +126,23 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # retrieve the root module name of the model which is the first one.
         use_smp = self.use_smp
         cfg = self.cfg.model
-        transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
-        auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer, model.use_peft)
+        predefined_model = model.predefined_model
+        if not predefined_model:
+            # When running with model that is not predefined
+            # we use HF's accelerate to handle the FSDP and activation checkpoint
+            # Map to HF name: https://github.com/huggingface/accelerate/blob/main/src/accelerate/utils/constants.py#L37
+            if cfg.auto_wrap_policy == "transformer_auto_wrap_policy":
+                auto_wrap_policy = "transformer_based_wrap"
+            elif cfg.auto_wrap_policy == "size_based_auto_wrap_policy":
+                auto_wrap_policy = "size_based_wrap"
+            else:
+                auto_wrap_policy = "no_wrap"
+            fsdp_plugin = FullyShardedDataParallelPlugin(auto_wrap_policy=auto_wrap_policy)
+            fsdp_plugin.set_auto_wrap_policy(model.model)
+            auto_wrap_policy = fsdp_plugin.auto_wrap_policy
+        else:
+            transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
+            auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer, model.use_peft)
         mixed_precision_policy = set_mixed_precision_recipe(
             precision=cfg.precision,
             use_smp=use_smp,
@@ -152,14 +174,25 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             self._record_replication_process_group()
 
         if cfg.activation_checkpointing:
-            apply_activation_checkpoint(
-                model=pytorch_model,
-                model_type=cfg.model_type,
-                use_smp=use_smp,
-                fp8=cfg.fp8,
-                moe=cfg.moe,
-            )
-        if cfg.offload_activations:
+            if not predefined_model:
+                # Use native PT API to apply activation checkpoint
+                apply_activation_checkpointing(
+                    pytorch_model,
+                    checkpoint_wrapper_fn=functools.partial(
+                        checkpoint_wrapper,
+                        checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+                    ),
+                    auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                )
+            else:
+                apply_activation_checkpoint(
+                    model=pytorch_model,
+                    model_type=cfg.model_type,
+                    use_smp=use_smp,
+                    fp8=cfg.fp8,
+                    moe=cfg.moe,
+                )
+        if cfg.get("offload_activations", None):
             pytorch_model = offload_wrapper(pytorch_model)
             if cfg.model_type == "gpt_neox" and cfg.patch_neox_rope:
                 # TODO: add a check to the model type and use enum for it
@@ -168,7 +201,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return model
 
     def _setup_delayed_param(self, cfg, model):
-        if not cfg.delayed_param:
+        if not cfg.get("delayed_param", None):
             return None, None, nullcontext()
         if self.use_smp:
             return self._setup_smp_delayed_param(cfg, model)

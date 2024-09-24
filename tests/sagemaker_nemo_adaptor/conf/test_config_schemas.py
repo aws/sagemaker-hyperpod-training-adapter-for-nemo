@@ -11,9 +11,10 @@ from sagemaker_nemo_adaptor.conf.config_schemas import (
     BaseModelOptimizerScheduler,
     BaseRunConfig,
     BaseTrainerConfig,
-    LlamaV3Config,
-    LlamaV3ConfigWithSMP,
-    LlamaV3ModelConfigWithSMP,
+    ConfigAllow,
+    ConfigForbid,
+    ConfigWithSMPForbid,
+    ModelConfigWithSMP,
     SageMakerParallelConfig,
 )
 from sagemaker_nemo_adaptor.constants import ModelType
@@ -504,12 +505,12 @@ class Test_BaseConfig:
         }
 
 
-class Test_LlamaV3ModelConfigWithSMP:
+class Test_ModelConfigWithSMP:
     def test_inheritance(self):
         config = self.build_config()
 
         try:
-            validated = LlamaV3ModelConfigWithSMP.model_validate(config)
+            validated = ModelConfigWithSMP.model_validate(config)
             assert isinstance(validated, BaseModelConfig)
             assert isinstance(validated, SageMakerParallelConfig)
         except Exception as e:
@@ -522,12 +523,12 @@ class Test_LlamaV3ModelConfigWithSMP:
         }
 
 
-class Test_LlamaV3Config:
+class Test_ConfigForbid:
     def test_inheritance(self):
         config = self.build_config()
 
         try:
-            validated = LlamaV3Config.model_validate(config)
+            validated = ConfigForbid.model_validate(config)
             assert isinstance(validated, BaseConfig)
             assert isinstance(validated.model, BaseModelConfig)
         except Exception as e:
@@ -542,14 +543,16 @@ class Test_LlamaV3Config:
         }
 
 
-class Test_LlamaV3ConfigWithSMP:
+class Test_ConfigAllow:
     def test_inheritance(self):
         config = self.build_config()
+        config["model"]["custom_test"] = "test"
 
         try:
-            validated = LlamaV3ConfigWithSMP.model_validate(config)
+            validated = ConfigAllow.model_validate(config)
             assert isinstance(validated, BaseConfig)
-            assert isinstance(validated.model, LlamaV3ModelConfigWithSMP)
+            assert isinstance(validated.model, BaseModelConfig)
+            assert validated.model.custom_test == "test"
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
@@ -557,6 +560,26 @@ class Test_LlamaV3ConfigWithSMP:
         return {
             "distributed_backend": "nccl",
             "trainer": BaseTrainerConfig().model_dump(),
-            "model": LlamaV3ModelConfigWithSMP(do_finetune=False).model_dump(),
+            "model": BaseModelConfig(do_finetune=False).model_dump(),
+            **kwargs,
+        }
+
+
+class Test_ConfigWithSMP:
+    def test_inheritance(self):
+        config = self.build_config()
+
+        try:
+            validated = ConfigWithSMPForbid.model_validate(config)
+            assert isinstance(validated, BaseConfig)
+            assert isinstance(validated.model, ModelConfigWithSMP)
+        except Exception as e:
+            pytest.fail(f"Unexpectedly failed to validate config: {e}")
+
+    def build_config(self, **kwargs) -> dict:
+        return {
+            "distributed_backend": "nccl",
+            "trainer": BaseTrainerConfig().model_dump(),
+            "model": ModelConfigWithSMP(do_finetune=False).model_dump(),
             **kwargs,
         }

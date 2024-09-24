@@ -23,7 +23,7 @@ def train(cfg: DictConfig) -> None:
 
 
 @hydra.main(config_path="conf", config_name="mistral_config", version_base="1.2")
-@validate_config
+@validate_config()
 def main(cfg: DictConfig) -> None:
     train(cfg)
 

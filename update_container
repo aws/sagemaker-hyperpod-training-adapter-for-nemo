@@ -1,0 +1,6 @@
+#!/bin/bash
+cp -r ./src/sagemaker_nemo_adaptor/*.py /opt/conda/lib/python3.11/site-packages/sagemaker_nemo_adaptor/
+cp -r ./src/sagemaker_nemo_adaptor/collections /opt/conda/lib/python3.11/site-packages/sagemaker_nemo_adaptor/
+cp -r ./src/sagemaker_nemo_adaptor/patches /opt/conda/lib/python3.11/site-packages/sagemaker_nemo_adaptor/
+cp -r ./src/sagemaker_nemo_adaptor/conf /opt/conda/lib/python3.11/site-packages/sagemaker_nemo_adaptor/
+cp -r ./src/sagemaker_nemo_adaptor/utils /opt/conda/lib/python3.11/site-packages/sagemaker_nemo_adaptor/

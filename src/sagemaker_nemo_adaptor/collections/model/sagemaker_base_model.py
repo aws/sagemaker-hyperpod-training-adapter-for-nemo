@@ -21,6 +21,7 @@ from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
+from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 from sagemaker_nemo_adaptor.utils.train_utils import get_batch_for_cp_rank
 
@@ -35,6 +36,31 @@ class SageMakerNLPBaseModel(ModelPT):
     and training/eval behaviors.
     User will need to either consume the provided inheritors or inherit and implement their own model class.
     """
+
+    # A mapping from our recipe configs to the hf model config
+    # TODO: Revisit naming strategy and probably move this map to recipe checking
+    _config_mapping_recipe_to_hf = {
+        "vocab_size": "vocab_size",
+        "hidden_width": "hidden_size",
+        "intermediate_size": "intermediate_size",
+        "num_layers": "num_hidden_layers",
+        "num_heads": "num_attention_heads",
+        "max_context_width": "max_position_embeddings",
+        "initializer_range": "initializer_range",
+        "num_key_value_heads": "num_key_value_heads",
+        "layernorm_epsilon": "rms_norm_eps",
+        "rotary_pct": "rotary_pct",
+        "rotary_emb_base": "rotary_emb_base",
+        "mistral_sliding_window": "sliding_window",
+        "rope_theta": "rope_theta",
+        "mixtral_sliding_window": "sliding_window",
+        "num_experts_per_tok": "num_experts_per_tok",
+        "num_local_experts": "num_local_experts",
+        "delayed_param": "delayed_param",
+    }
+    # Whether if the model is predefined
+    # All subclass should set this to True
+    predefined_model = False
 
     def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp=True):
         self._cfg = cfg
@@ -57,9 +83,22 @@ class SageMakerNLPBaseModel(ModelPT):
         cls = type(self).__name__
         raise NotImplementedError(f"{cls}.get_model_config not implemented")
 
+    def _get_model_configurable_dict(self):
+        """
+        Get the a dict that contains all configurable values of the current model
+        This method will only be used for child class
+        """
+        config_dict = {}
+        for recipe_cfg, hf_config in self._config_mapping_recipe_to_hf.items():
+            if self._cfg.get(recipe_cfg, None) is not None:
+                config_dict[hf_config] = self._cfg.get(recipe_cfg)
+        if dist.get_rank() == 0:
+            _logger.info(f"Overriding model config with {config_dict}")
+        return config_dict
+
     @property
     def use_peft(self):
-        return hasattr(self._cfg, "peft") and self._cfg.peft.peft_type is not None
+        return self._cfg.get("peft", None) is not None and self._cfg.peft.get("peft_type", None) is not None
 
     @property
     def do_finetune_with_pretrained_weights(self):
@@ -68,7 +107,7 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         return (
             self._cfg.get("do_finetune", True)
-            and self._cfg.get("pretrained_model_name_or_path", None) is not None
+            and self._cfg.get("hf_model_name_or_path", None) is not None
             and self._cfg.get("resume_from_checkpoint", None) is None
         )
 
@@ -81,11 +120,16 @@ class SageMakerNLPBaseModel(ModelPT):
     def setup(self, *a, **kw):
         if self.do_patch_attn_context_parallel:
             patch_llama_flash_attn_cp.apply_patch()
-        if self._cfg.pretrained_model_name_or_path is not None:
-            from transformers import AutoConfig
-
+        if not self.predefined_model:
+            assert not self.use_smp, "model that is not predefined can not support use_smp=True"
+            assert (
+                self._cfg.get("hf_model_name_or_path", None) is not None
+            ), "hf_model_name_or_path is required when the model is not predefined"
+            _logger.info(
+                f"{self._cfg.hf_model_name_or_path} is not a predefined model, most of smp features will be ignored, e.g. TP/fp8, only FSDP/activation_checkpoint can be applied."
+            )
             # Using config from the pretrained model
-            self.model_config = AutoConfig.from_pretrained(self._cfg.pretrained_model_name_or_path)
+            self.model_config = get_hf_config_from_name_or_path(self._cfg)
             # Disable KV cache for HF models
             if hasattr(self.model_config, "use_cache"):
                 self.model_config.use_cache = False
@@ -156,7 +200,7 @@ class SageMakerNLPBaseModel(ModelPT):
             )
 
     def _initialize_model(self, model_cfg):
-        if not self._cfg.delayed_param:
+        if self._cfg.get("delayed_param", None) is None or not self._cfg.delayed_param:
             # initialize model on host memory
             return self.build_model(model_cfg)
         if self.do_finetune_with_pretrained_weights and dist.get_rank() == 0:
@@ -177,7 +221,7 @@ class SageMakerNLPBaseModel(ModelPT):
         assert not self.use_smp, "Must set use_smp=False to use PEFT"
         assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
         assert self._cfg.do_finetune, "Must set do_finetune=True to use PEFT"
-        assert self._cfg.pretrained_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
+        assert self._cfg.hf_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
 
         # set env vars for efficient HF model loading (PEFT does not use SMP delayed param)
         # see https://tiny.amazon.com/15r3rmil3/githhuggtranblob2790srctran
@@ -238,7 +282,7 @@ class SageMakerNLPBaseModel(ModelPT):
         return model
 
     def _build_model_from_pretrain(self, model_cfg, torch_dtype=None, quantization_config=None):
-        path = self._cfg.pretrained_model_name_or_path
+        path = self._cfg.hf_model_name_or_path
         _logger.info("Loading pretrained weights from %s.", path)
         use_flash_attn = self._cfg.use_flash_attention
         attn = "flash_attention_2"
@@ -297,7 +341,7 @@ class SageMakerNLPBaseModel(ModelPT):
         General training forward steps, backward/optimizer step will be done by
         PTL can also skip auto optimization with self.automatic_optimization=False
         """
-        if self._cfg.fp8 and self.use_smp:
+        if self.use_smp and self._cfg.fp8:
             self.loss = self._training_step_fp8(batch, batch_idx, *a, **kw)
         else:
             self.loss = self._training_step(batch, batch_idx, *a, **kw)
@@ -308,12 +352,12 @@ class SageMakerNLPBaseModel(ModelPT):
         Parse input batch, pre-process for context parallel
         """
         input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
-        if self._cfg.context_parallel_degree > 1:
+        if self._cfg.get("context_parallel_degree", 1) > 1:
             input_ids, labels = get_batch_for_cp_rank((input_ids, labels))
 
         if batch_idx == 0:
             # checking only on batch 0 to reduce checks during runtime
-            if input_ids.shape[1] != (self._cfg.max_context_width // self._cfg.context_parallel_degree):
+            if input_ids.shape[1] != (self._cfg.max_context_width // self._cfg.get("context_parallel_degree", 1)):
                 _logger.warning(
                     f"Input data passed {input_ids.shape} does not respect max_context_width set. If context parallelism is enabled,",
                     f"input_ids sequence length == (model.max_context_width / model.context_parallel_degree) ",

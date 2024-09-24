@@ -3,8 +3,9 @@ from typing import Any, Callable, Optional, TypeVar, cast
 
 from omegaconf import DictConfig, OmegaConf
 from pydantic import BaseModel, ValidationError
+from transformers import AutoConfig
 
-from sagemaker_nemo_adaptor.conf.config_schemas import HF_SCHEMAS, SMP_SCHEMAS
+from sagemaker_nemo_adaptor.conf.config_schemas import get_model_validator
 from sagemaker_nemo_adaptor.constants import ModelType
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
@@ -12,29 +13,36 @@ _logger = Logger().get_logger()
 
 _T = TypeVar("_T", bound=Callable[..., Any])
 
-
-def _get_model_validator(config: DictConfig) -> type[BaseModel]:
-    SchemaValidator = (
-        SMP_SCHEMAS.get(config.model.model_type) if config.use_smp else HF_SCHEMAS.get(config.model.model_type)
-    )
-
-    if not SchemaValidator:
-        raise ValueError(f"Invalid model_type {config.model.model_type}")
-
-    return SchemaValidator
+MAX_RETRY_TIME = 5
 
 
-def _validate_model_type(model_type: Optional[str]) -> None:
-    if model_type is None:
-        msg = "model_type is missing but is required"
+def get_hf_config_from_name_or_path(config):
+    """
+    Create a HF pretrained config based on user specified name or path
+    """
+    access_token = config.get("hf_access_token", None)
+    hf_config = None
+    # When multiple ranks query for the same HF config, it might error out, adding some retry logic
+    for i in range(MAX_RETRY_TIME):
+        try:
+            hf_config = AutoConfig.from_pretrained(config.hf_model_name_or_path, token=access_token)
+        except FileNotFoundError:
+            if i == MAX_RETRY_TIME - 1:
+                raise RuntimeError(f"Max retry timeout when fetching config from {config.hf_model_name_or_path}")
+            _logger.warning(f"Retrying to get the config of {config.hf_model_name_or_path}")
+    return hf_config
+
+
+def _validate_model_type(model_type: Optional[str], hf_model_name_or_path: Optional[str]) -> None:
+    if model_type is None and hf_model_name_or_path is None:
+        msg = "model_type and hf_model_name_or_path are missing but at least one is required"
         _logger.error(msg)
         raise AttributeError(msg)
 
     # Enums support the `in` operator starting with Python 3.12
-    if model_type not in [key.value for key in ModelType]:
-        msg = f'Model "{model_type}" is not supported by SageMaker Model Parallel. Try setting `use_smp` to False'
-        _logger.error(msg)
-        raise AttributeError(msg)
+    if model_type is not None and model_type not in [key.value for key in ModelType]:
+        msg = f'Model "{model_type}" is not supported by SageMaker Model Parallel. Please set `use_smp` to False'
+        _logger.warning(msg)
 
 
 def _validate_custom_recipe_extra_params(model: type[BaseModel]) -> None:
@@ -59,8 +67,8 @@ def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config)
         _logger.info(msg)
 
 
-def _validate_schema(cfg: DictConfig) -> tuple[DictConfig, type[BaseModel]]:
-    SchemaValidator = _get_model_validator(cfg)
+def _validate_schema(cfg: DictConfig, extra="forbid") -> tuple[DictConfig, type[BaseModel]]:
+    SchemaValidator = get_model_validator(use_smp=cfg.use_smp, extra=extra)
     config_dict = OmegaConf.to_container(cfg, resolve=True)
 
     try:
@@ -76,17 +84,20 @@ def _validate_schema(cfg: DictConfig) -> tuple[DictConfig, type[BaseModel]]:
         exit()
 
 
-def validate_config(fn: _T) -> _T:
-    @wraps(fn)
-    def validations_wrapper(cfg: DictConfig, *args, **kwargs) -> DictConfig:
-        """
-        Execute all validations in this function
-        """
-        _validate_model_type(cfg.model.model_type)
-        merged_config, validated_model = _validate_schema(cfg)
-        _validate_custom_recipe_extra_params(validated_model)
-        _validate_params_not_provided_by_custom_recipe(cfg, merged_config)
+def validate_config(extra="forbid"):
+    def _validate_config(fn: _T) -> _T:
+        @wraps(fn)
+        def validations_wrapper(cfg: DictConfig, *args, **kwargs) -> DictConfig:
+            """
+            Execute all validations in this function
+            """
+            _validate_model_type(cfg.model.get("model_type", None), cfg.model.get("hf_model_name_or_path", None))
+            merged_config, validated_model = _validate_schema(cfg, extra=extra)
+            _validate_custom_recipe_extra_params(validated_model)
+            _validate_params_not_provided_by_custom_recipe(cfg, merged_config)
 
-        return fn(merged_config, *args, **kwargs)
+            return fn(merged_config, *args, **kwargs)
 
-    return cast(_T, validations_wrapper)
+        return cast(_T, validations_wrapper)
+
+    return _validate_config

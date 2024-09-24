@@ -42,16 +42,16 @@ class SageMakerPeftCheckpointIO(SageMakerBaseCheckpointIO):
 
     def _merge_and_upload_peft_model(self, trainer: "pl.Trainer", checkpoint_dir: str):
         """Merge adapter weights with base model and upload final model"""
-        pretrained_model_name_or_path = trainer.strategy.cfg.model.get("pretrained_model_name_or_path", None)
-        if pretrained_model_name_or_path is None:
+        hf_model_name_or_path = trainer.strategy.cfg.model.get("hf_model_name_or_path", None)
+        if hf_model_name_or_path is None:
             logging.warning("No pretrained model name or path found, could not upload final model.")
             return
 
         final_model_dir = os.path.join(checkpoint_dir, "final-model")
 
-        logging.info(f"Loading Base model from : {pretrained_model_name_or_path}")
+        logging.info(f"Loading Base model from : {hf_model_name_or_path}")
         base_model = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path,
+            hf_model_name_or_path,
             attn_implementation="flash_attention_2",
             torch_dtype="auto",
             use_cache=False,

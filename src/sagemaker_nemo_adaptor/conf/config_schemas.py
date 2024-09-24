@@ -26,6 +26,35 @@ HELPER FUNCTIONS
 """
 
 
+def create_dynamic_model(base_model_cls, extra: str = "forbid"):
+    """
+    Dynamically creatig the model config based on the extra config
+    extra="forbid": No extra configs will be allowed, will error out
+    extra="allow": Extra configs will be merged into the model config without validate
+    """
+    config = ConfigDict(protected_namespaces=(), extra=extra)
+
+    class DynamicModelConfig(base_model_cls):
+        model_config = config
+
+    return DynamicModelConfig
+
+
+def get_model_validator(use_smp, extra="forbid") -> type[BaseModel]:
+    if extra == "forbid":
+        if use_smp:
+            return ConfigWithSMPForbid
+        else:
+            return ConfigForbid
+    elif extra == "allow":
+        if use_smp:
+            return ConfigWithSMPAllow
+        else:
+            return ConfigAllow
+    else:
+        raise ValueError(f"Unsupported extra type {extra}")
+
+
 def validate_distributed_degrees(
     shard_degree: Optional[int],
     tensor_model_parallel_degree: Optional[int],
@@ -154,23 +183,22 @@ class BaseModelConfig(BaseModel):
     context_parallel_degree: int = Field(default=1, ge=1)
 
     # Model Architecture
-    max_context_width: int = Field(default=4096, ge=1)
-    max_position_embeddings: Optional[int] = Field(default=None, ge=1)
-    num_layers: int = Field(default=32, ge=1)
-    hidden_width: int = Field(default=4096, ge=1)
-    num_heads: int = Field(default=32, ge=1)
-    intermediate_size: int = Field(default=14336, ge=1)
-    initializer_range: float = Field(default=0.02, ge=0)
-    pad_token_id: int = 0
-    layernorm_epsilon: float = Field(default=1e-5, ge=0)
-    attention_bias: bool = False
-    vocab_size: int = Field(default=32000, ge=1)
-    activation: Literal["gelu"] = "gelu"  # TODO: https://www.tensorflow.org/api_docs/python/tf/keras/activations?
-    num_key_value_heads: Optional[int] = Field(default=None, ge=1)
-    use_flash_attention: bool = True
+    max_context_width: int = Field(default=2048, ge=1)  # max_context_width is always required for data purposes
+    max_position_embeddings: int | None = Field(default=None, ge=1)
+    num_layers: int | None = Field(default=None, ge=1)
+    hidden_width: int | None = Field(default=None, ge=1)
+    num_heads: int | None = Field(default=None, ge=1)
+    intermediate_size: int | None = Field(default=None, ge=1)
+    initializer_range: float | None = Field(default=None, ge=0)
+    pad_token_id: int | None = None
+    layernorm_epsilon: float | None = Field(default=None, ge=0)
+    attention_bias: bool | None = None
+    vocab_size: int | None = Field(default=None, ge=1)
+    activation: str | None = None
+    num_key_value_heads: int | None = Field(default=None, ge=1)
+    use_flash_attention: bool | None = None
 
-    # Transformer Engine
-    transformer_engine: bool = True
+    # fp8
     fp8: bool = True
     fp8_amax_history_len: int = Field(default=1024, ge=1)
     fp8_amax_compute_algo: Literal["max", "most_recent"] = "max"
@@ -178,11 +206,12 @@ class BaseModelConfig(BaseModel):
     # Fine-Tuning
     do_finetune: bool = True
     # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
-    pretrained_model_name_or_path: Optional[str] = None
+    hf_model_name_or_path: Optional[str] = None
+    hf_access_token: Optional[str] = None
 
     precision: Union[str, int, None] = None
 
-    lr_decay_iters: int = Field(default=47683, ge=1)  # range? Optional?
+    lr_decay_iters: int = Field(default=47683, ge=1)
 
     log_reduced_training_loss: bool = True  # Rubik has False
 
@@ -196,30 +225,28 @@ class BaseModelConfig(BaseModel):
         if data.get("max_position_embeddings") is None:
             data["max_position_embeddings"] = data.get("max_context_width")
 
-        model_type = data.get("model_type")
-        if model_type and model_type not in [e.value for e in ModelType]:
-            raise ValueError(f"Invalid model_type '{model_type}'")
-
         return data
 
     @model_validator(mode="after")
     def after_model_validations(self) -> "BaseModelConfig":
         msg_fn = lambda field, val: f"'{field}' is suggested to be a power of 2. Current value is {val}"
 
-        if not is_power_of_two(self.max_context_width):
+        if getattr(self, "max_context_width", None) is not None and not is_power_of_two(self.max_context_width):
             _logger.warning(msg_fn("max_context_width", self.max_context_width))
 
-        if not is_power_of_two(self.hidden_width):
+        if getattr(self, "hidden_width", None) is not None and not is_power_of_two(self.hidden_width):
             _logger.warning(msg_fn("hidden_width", self.hidden_width))
 
-        if not is_power_of_two(self.num_heads):
+        if getattr(self, "num_heads", None) is not None and not is_power_of_two(self.num_heads):
             _logger.warning(msg_fn("num_heads", self.num_heads))
 
-        if not (self.num_key_value_heads is None or is_power_of_two(self.num_key_value_heads)):
+        if getattr(self, "num_key_value_heads", None) is not None and not (
+            self.num_key_value_heads is None or is_power_of_two(self.num_key_value_heads)
+        ):
             _logger.warning(msg_fn("num_key_value_heads", self.num_key_value_heads))
 
-        if self.do_finetune and self.pretrained_model_name_or_path is None:
-            raise ValueError("Must provide 'pretrained_model_name_or_path' or set 'do_finetune' to False")
+        if self.do_finetune and self.hf_model_name_or_path is None:
+            raise ValueError("Must provide 'hf_model_name_or_path' or set 'do_finetune' to False")
 
         return self
 
@@ -301,8 +328,7 @@ class BaseConfig(BaseModel):
     distributed_backend: Literal["smddp", "nccl"]
     restore_from_path: Optional[str] = None
 
-    # CHILD CONFIGS - optional ones must be configured on the subclass
-    model: Optional[Union[BaseModelConfig, type[BaseModelConfig]]] = None
+    model: BaseModel
     trainer: BaseTrainerConfig
     exp_manager: Optional[BaseExpManager] = None
     internal: BaseInternalConfig = Field(default_factory=BaseInternalConfig)
@@ -333,29 +359,21 @@ class BaseConfig(BaseModel):
         return self
 
 
-"""
-LLAMA V3 CONFIGS
-"""
-
-
-class LlamaV3ModelConfigWithSMP(BaseModelConfig, SageMakerParallelConfig):
+class ModelConfigWithSMP(BaseModelConfig, SageMakerParallelConfig):
     pass
 
 
-class LlamaV3Config(BaseConfig):
-    model: BaseModelConfig  # type: ignore comment;
+class ConfigForbid(BaseConfig):
+    model: create_dynamic_model(BaseModelConfig, extra="forbid")
 
 
-class LlamaV3ConfigWithSMP(BaseConfig):
-    model: LlamaV3ModelConfigWithSMP  # type: ignore comment;
+class ConfigAllow(BaseConfig):
+    model: create_dynamic_model(BaseModelConfig, extra="allow")
 
 
-"""
-CONFIG SCHEMAS
-"""
+class ConfigWithSMPForbid(BaseConfig):
+    model: create_dynamic_model(ModelConfigWithSMP, extra="forbid")
 
-# Based on Hugging Face
-HF_SCHEMAS: dict[str, type[BaseModel]] = {ModelType.LLAMA_V3.value: LlamaV3Config}
 
-# With Rubik optimizations
-SMP_SCHEMAS: dict[str, type[BaseModel]] = {ModelType.LLAMA_V3.value: LlamaV3ConfigWithSMP}
+class ConfigWithSMPAllow(BaseConfig):
+    model: create_dynamic_model(ModelConfigWithSMP, extra="allow")
