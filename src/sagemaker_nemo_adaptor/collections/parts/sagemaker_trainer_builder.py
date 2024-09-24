@@ -144,6 +144,7 @@ class SageMakerTrainerBuilder:
             logger=False,  # Logger will be configured in exp_manager, set to false here to prevent conflict
             plugins=plugins,
             callbacks=callbacks,
+            log_every_n_steps=self.cfg.trainer.log_every_n_steps,
             # Disable deafult lightning ModelCheckpoint if none of them are used.
             enable_checkpointing=self.use_generic_checkpoint or self.use_resilience_checkpoint,
         )
