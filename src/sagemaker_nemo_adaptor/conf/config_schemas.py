@@ -326,7 +326,6 @@ class BaseConfig(BaseModel):
     name: list[str] = ["hf_llama_8b"]
     use_smp: bool = True
     distributed_backend: Literal["smddp", "nccl"]
-    restore_from_path: Optional[str] = None
 
     model: BaseModel
     trainer: BaseTrainerConfig

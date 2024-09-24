@@ -1,6 +1,5 @@
 name:
     - hf_mixtral_8x7b # Go with SFA
-restore_from_path: null
 trainer:
   devices: 8
   num_nodes: 8

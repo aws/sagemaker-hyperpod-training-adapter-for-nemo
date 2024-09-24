@@ -1,6 +1,5 @@
 name:
     - hf_llama_8b # Go with SFA
-restore_from_path: null
 
 trainer:
   devices: 8
