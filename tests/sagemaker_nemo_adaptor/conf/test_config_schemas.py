@@ -20,6 +20,10 @@ from sagemaker_nemo_adaptor.constants import ModelType
 from tests.fixtures.loggers import sagemaker_logger  # noqa F401
 
 
+def create_BaseModelConfig():
+    return BaseModelConfig(do_finetune=False)
+
+
 class Test_SageMakerParallelConfig:
     def test_happy_path(self):
         config = self.build_config()
@@ -226,7 +230,7 @@ class Test_BaseModelConfig:
 
     def test_no_args(self):
         try:
-            validated = BaseModelConfig()
+            validated = create_BaseModelConfig()
             assert validated.model_type == ModelType.LLAMA_V3.value
             assert type(validated.optim) is BaseModelOptimizerConfig
             assert type(validated.data) is BaseModelDataConfig
@@ -274,6 +278,7 @@ class Test_BaseModelConfig:
 
     def build_config(self, **kwargs) -> dict:
         return {
+            "do_finetune": False,
             "model_type": ModelType.LLAMA_V3.value,
             "hidden_width": 4096,
             "max_content_width": 4096,
@@ -494,7 +499,7 @@ class Test_BaseConfig:
         return {
             "distributed_backend": "nccl",
             "trainer": BaseTrainerConfig().model_dump(),
-            "model": BaseModelConfig().model_dump(),
+            "model": create_BaseModelConfig().model_dump(),
             **kwargs,
         }
 
@@ -512,7 +517,7 @@ class Test_LlamaV3ModelConfigWithSMP:
 
     def build_config(self, **kwargs) -> dict:
         return {
-            "model": BaseModelConfig().model_dump(),
+            "do_finetune": False,
             **kwargs,
         }
 
@@ -532,7 +537,7 @@ class Test_LlamaV3Config:
         return {
             "distributed_backend": "nccl",
             "trainer": BaseTrainerConfig().model_dump(),
-            "model": BaseModelConfig().model_dump(),
+            "model": create_BaseModelConfig().model_dump(),
             **kwargs,
         }
 
@@ -552,6 +557,6 @@ class Test_LlamaV3ConfigWithSMP:
         return {
             "distributed_backend": "nccl",
             "trainer": BaseTrainerConfig().model_dump(),
-            "model": LlamaV3ModelConfigWithSMP().model_dump(),
+            "model": LlamaV3ModelConfigWithSMP(do_finetune=False).model_dump(),
             **kwargs,
         }

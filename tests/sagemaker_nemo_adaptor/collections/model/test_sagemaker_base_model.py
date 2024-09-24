@@ -65,6 +65,7 @@ class TestBuildModel:
         auto_model_mock.from_pretrained = from_pretrained_stub
 
         # prepare
+        full_config.model.do_finetune = True
         full_config.model.pretrained_model_name_or_path = "test/path"
         base = build_base_model(full_config.model)
 
@@ -84,6 +85,7 @@ class TestBuildModel:
         auto_model_mock.from_pretrained = from_pretrained_stub
 
         # prepare
+        full_config.model.do_finetune = True
         full_config.model.pretrained_model_name_or_path = "test/path"
         full_config.model.use_flash_attention = False
         base = build_base_model(full_config.model)

@@ -62,18 +62,15 @@ class SageMakerNLPBaseModel(ModelPT):
         return hasattr(self._cfg, "peft") and self._cfg.peft.peft_type is not None
 
     @property
-    def do_finetune(self):
-        """
-        Returns true if finetuning
-        """
-        return self._cfg.get("pretrained_model_name_or_path", None) is not None
-
-    @property
     def do_finetune_with_pretrained_weights(self):
         """
-        Returns true for start of finetuning only, meaning we don't have a checkpoint and need to load pretrained weights
+        Returns true if we need to load pretrained weights from model_name_or_path
         """
-        return self.do_finetune and self._cfg.get("resume_from_checkpoint", None) is None
+        return (
+            self._cfg.get("do_finetune", True)
+            and self._cfg.get("pretrained_model_name_or_path", None) is not None
+            and self._cfg.get("resume_from_checkpoint", None) is None
+        )
 
     @property
     def do_patch_attn_context_parallel(self):
@@ -84,7 +81,7 @@ class SageMakerNLPBaseModel(ModelPT):
     def setup(self, *a, **kw):
         if self.do_patch_attn_context_parallel:
             patch_llama_flash_attn_cp.apply_patch()
-        if self.do_finetune:
+        if self._cfg.pretrained_model_name_or_path is not None:
             from transformers import AutoConfig
 
             # Using config from the pretrained model
@@ -179,7 +176,8 @@ class SageMakerNLPBaseModel(ModelPT):
     def _build_model_from_pretrain_peft(self, model_cfg):
         assert not self.use_smp, "Must set use_smp=False to use PEFT"
         assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
-        assert self.do_finetune, "Must provide pretrained weights to use PEFT"
+        assert self._cfg.do_finetune, "Must set do_finetune=True to use PEFT"
+        assert self._cfg.pretrained_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
 
         # set env vars for efficient HF model loading (PEFT does not use SMP delayed param)
         # see https://tiny.amazon.com/15r3rmil3/githhuggtranblob2790srctran

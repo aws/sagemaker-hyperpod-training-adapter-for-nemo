@@ -176,6 +176,7 @@ class BaseModelConfig(BaseModel):
     fp8_amax_compute_algo: Literal["max", "most_recent"] = "max"
 
     # Fine-Tuning
+    do_finetune: bool = True
     # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
     pretrained_model_name_or_path: Optional[str] = None
 
@@ -216,6 +217,9 @@ class BaseModelConfig(BaseModel):
 
         if not (self.num_key_value_heads is None or is_power_of_two(self.num_key_value_heads)):
             _logger.warning(msg_fn("num_key_value_heads", self.num_key_value_heads))
+
+        if self.do_finetune and self.pretrained_model_name_or_path is None:
+            raise ValueError("Must provide 'pretrained_model_name_or_path' or set 'do_finetune' to False")
 
         return self
 

@@ -91,6 +91,7 @@ model:
   fp8_amax_compute_algo: max
 
   # finetune
+  do_finetune: False
   # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
   pretrained_model_name_or_path: null
 

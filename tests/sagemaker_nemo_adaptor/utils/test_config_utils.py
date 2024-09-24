@@ -16,6 +16,7 @@ from sagemaker_nemo_adaptor.utils.config_utils import (
 def sample_config():
     config_dict = {
         "model": {
+            "do_finetune": False,
             "model_type": "value",
         },
         "use_smp": True,
