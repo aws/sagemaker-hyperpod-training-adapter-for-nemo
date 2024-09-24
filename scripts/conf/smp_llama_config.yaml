@@ -84,7 +84,6 @@ model:
   use_flash_attention: True
 
   # Transformer Engine
-  transformer_engine: True
   fp8: False
   fp8_amax_history_len: 1024
   fp8_amax_compute_algo: max

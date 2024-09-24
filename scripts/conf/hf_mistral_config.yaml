@@ -87,7 +87,6 @@ model:
   rms_norm_eps: 1e-6
 
   # Transformer Engine
-  transformer_engine: True
   fp8: False
   fp8_amax_history_len: 1024
   fp8_amax_compute_algo: max
