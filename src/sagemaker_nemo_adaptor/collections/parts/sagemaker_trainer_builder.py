@@ -81,7 +81,8 @@ class SageMakerTrainerBuilder:
 
     @property
     def use_resilience_checkpoint(self):
-        return self.cfg.exp_manager.get("auto_checkpoint", False)
+        auto_checkpoint = self.cfg.exp_manager.auto_checkpoint
+        return auto_checkpoint.get("enabled", False)
 
     def _create_plugins(self) -> list:
         plugins = []
@@ -108,10 +109,16 @@ class SageMakerTrainerBuilder:
             if self.use_resilience_checkpoint:
                 # If user specify a path to resume, disable auto resume.
                 enabled_auto_reload = exp_manager.resume_from_checkpoint == None
+                warmup_steps = exp_manager.auto_checkpoint.warmup_steps
+                drop_n_warmup_steps = exp_manager.auto_checkpoint.drop_n_warmup_steps
+                interval_guard = exp_manager.auto_checkpoint.interval_guard
                 callbacks.append(
                     SageMakerModelCheckpointResilience(
                         enable_auto_reload=enabled_auto_reload,
                         checkpoint_dir=exp_manager.get("checkpoint_dir", None),
+                        warmup_steps=warmup_steps,
+                        drop_n_warmup_steps=drop_n_warmup_steps,
+                        interval_guard=interval_guard,
                     )
                 )
             # Generic checkpointing callback.

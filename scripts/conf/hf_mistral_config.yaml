@@ -28,7 +28,8 @@ exp_manager:
   checkpoint_dir: ${exp_manager.exp_dir}/checkpoints/
   resume_from_checkpoint: null
   # Set auto_checkpoint = False to disable auto resilience checkpointing
-  auto_checkpoint: False
+  auto_checkpoint:
+    enabled: False
   export_full_model:
     # Set every_n_train_steps = 0 to disable full checkpointing
     every_n_train_steps: 0

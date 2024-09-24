@@ -253,6 +253,19 @@ class BaseCheckpointCallbackConfig(BaseModel):
     save_last: bool = True
 
 
+class BaseAutoCheckpointConfig(BaseModel):
+    enabled: Optional[bool] = False
+    warmup_steps: int = Field(default=12, ge=0)
+    drop_n_warmup_steps: int = Field(default=3, ge=0)
+    interval_guard: float = Field(default=1.25, ge=1.0)
+
+    @model_validator(mode="after")
+    def after_model_validations(self) -> "BaseAutoCheckpoint":
+        if self.warmup_steps < self.drop_n_warmup_steps:
+            raise ValueError(f"warmup_steps < drop_n_warmup_steps ({self.warmup_steps} < {self.drop_n_warmup_steps})")
+        return self
+
+
 class BaseExportFullModelConfig(BaseModel):
     every_n_train_steps: int = Field(default=0, ge=0)
     save_last: bool = True
@@ -267,7 +280,7 @@ class BaseExpManager(BaseModel):
     export_full_model: BaseExportFullModelConfig = Field(default_factory=BaseExportFullModelConfig)
     checkpoint_dir: Optional[str] = None
     resume_from_checkpoint: Optional[str] = None
-    auto_checkpoint: Optional[bool] = False
+    auto_checkpoint: BaseAutoCheckpointConfig = Field(default_factory=BaseAutoCheckpointConfig)
 
 
 class BaseInternalConfig(BaseModel):

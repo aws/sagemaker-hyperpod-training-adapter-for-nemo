@@ -33,12 +33,20 @@ class SageMakerExportFullModel(CallbackParams):
 
 
 @dataclass
+class SageMakerAutoCheckpoint:
+    enabled: bool = False
+    warmup_steps: int = 12
+    drop_n_warmup_steps: int = 3
+    interval_guard: float = 1.25
+
+
+@dataclass
 class ExpManagerConfig(NeMoExpManagerConfig):
     # TODO: add our customized params if needed
     log_reduced_training_loss: Optional[bool] = True
     export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
     checkpoint_dir: Optional[str] = None
-    auto_checkpoint: Optional[bool] = False
+    auto_checkpoint: Optional[SageMakerAutoCheckpoint] = field(default_factory=SageMakerAutoCheckpoint)
 
 
 def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None) -> Optional[Path]:

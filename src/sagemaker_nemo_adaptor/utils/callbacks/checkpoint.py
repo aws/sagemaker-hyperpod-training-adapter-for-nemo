@@ -1,11 +1,13 @@
 import math
 import os
+import time
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
+import torch.distributed as dist
 from nemo.utils import logging
 from pytorch_lightning.callbacks import Checkpoint
 from torch import Tensor
@@ -70,6 +72,7 @@ class SageMakerModelCheckpointBase(Checkpoint):
         logging.debug(state_dict)
         trainer.strategy.load_model_state_dict(state_dict)
         trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
+        self.load_state_dict(state_dict)
 
     def _save(
         self,
@@ -84,6 +87,68 @@ class SageMakerModelCheckpointBase(Checkpoint):
             checkpoint_type == SageMakerCheckpointType.FULL or checkpoint_type == SageMakerCheckpointType.PEFT
         )
         trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
+
+
+class _IntervalDecisionMaker:
+    def __init__(self, warmup_steps=12, drop_n_warmup_steps=3, interval_guard=1.25):
+        self.warmup_steps = warmup_steps
+        self.drop_n_warmup_steps = drop_n_warmup_steps
+        self.interval_guard = interval_guard
+        self.reset()
+
+    def reset(self):
+        self.step = 0
+        self.min_step_duration = float("inf")
+        self.max_ckpt_duration = float("-inf")
+        self._start = -1
+        self._end = -1
+        self._interval = 0
+
+    def start(self):
+        self._start = time.process_time()
+
+    def end(self):
+        self._end = time.process_time()
+        self.step += 1
+
+    def get_interval(self, max_ckpt_duration):
+        if self._interval > 0:
+            return self._interval
+        if self.step < self.drop_n_warmup_steps:
+            return 1
+
+        step_duration = self._end - self._start
+        self.min_step_duration = min(self.min_step_duration, step_duration)
+        self.max_ckpt_duration = max(self.max_ckpt_duration, max_ckpt_duration)
+        if self.step <= self.warmup_steps:
+            return 1
+
+        # update interval once. In order to save communication time, we compute
+        # min training step time and max ckeckpoint time locally during warmup.
+        # Once final warmup step is hit, we update interval by using all_gather
+        # one time to collect global max I/O and min training duration across
+        # all ranks.
+        device = torch.cuda.current_device()
+        world_size = dist.get_world_size()
+        dtype = torch.float16
+        tensor_list = [torch.zeros(2, dtype=dtype, device=device) for _ in range(world_size)]
+        tensor = torch.tensor([self.max_ckpt_duration, self.min_step_duration], dtype=dtype, device=device)
+        dist.all_gather(tensor_list, tensor)
+        max_ckpt_duration = max(tensor[0].item() for tensor in tensor_list)
+        min_step_duration = min(tensor[1].item() for tensor in tensor_list)
+
+        self.min_step_duration = min_step_duration
+        self.max_ckpt_duration = max_ckpt_duration
+        interval = int(math.ceil(max_ckpt_duration / min_step_duration * self.interval_guard))
+        self._interval = int(max(interval, 1))
+        logging.info(f"Warmup hit. {self}")
+        return self._interval
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return f"step_duration: {self.min_step_duration}, ckpt_duration: {self.max_ckpt_duration}, interval = {self._interval}"
 
 
 class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
@@ -108,12 +173,22 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
     )
     """
 
-    def __init__(self, enable_auto_reload: bool, checkpoint_dir: Optional[str] = None, *args, **kw):
+    def __init__(
+        self,
+        enable_auto_reload: bool,
+        checkpoint_dir: Optional[str] = None,
+        warmup_steps: int = 12,
+        drop_n_warmup_steps: int = 3,
+        interval_guard: float = 1.25,
+        *args,
+        **kw,
+    ):
         # If user specify a path to resume, disable auto resume.
         super().__init__(checkpoint_dir, *args, **kw)
         self._enable_auto_reload = enable_auto_reload
         self._every_n_train_steps = 1
         self._num_checkpoint = 0
+        self._interval_decision_maker = _IntervalDecisionMaker(warmup_steps, drop_n_warmup_steps, interval_guard)
 
     @property
     def save_top_k(self):
@@ -121,6 +196,33 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
         # is new checkpoint start but old checkpoint is still writing. If both
         # checkpoint corrupt, we don't have any checkpoint.
         return 3
+
+    def on_train_batch_start(
+        self,
+        trainer: "pl.Trainer",
+        *args,
+        **kwargs,
+    ) -> None:
+        super().on_train_batch_start(trainer, *args, **kwargs)
+        self._interval_decision_maker.start()
+
+    def on_train_batch_end(
+        self,
+        trainer: "pl.Trainer",
+        *args,
+        **kwargs,
+    ) -> None:
+        self._interval_decision_maker.end()
+        super().on_train_batch_end(trainer, *args, **kwargs)
+
+        # update every_n_train_steps
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        typ = SageMakerCheckpointType.LOCAL
+        checkpoint_io = trainer.strategy.checkpoint_io[typ]
+        max_ckpt_duration = checkpoint_io.profiler.max_duration
+        interval = self._interval_decision_maker.get_interval(max_ckpt_duration)
+        self._every_n_train_steps = interval
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """Resuming from local checkpoints until it succeeds."""
@@ -153,6 +255,31 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
             checkpoint_dir=local_checkpoint_dir,
         )
         self._num_checkpoint += 1
+
+    def load_state_dict(self, state_dict):
+        state_dict = state_dict.get("callbacks", {})
+        if self.state_key in state_dict:
+            state_dict = state_dict[self.state_key]
+            min_step_duration = self._interval_decision_maker.min_step_duration
+            max_ckpt_duration = self._interval_decision_maker.max_ckpt_duration
+            self._interval_decision_maker._interval = state_dict.get("interval", 0)
+            self._interval_decision_maker.min_step_duration = state_dict.get("min_step_duration", min_step_duration)
+            self._interval_decision_maker.max_ckpt_duration = state_dict.get("max_ckpt_duration", max_ckpt_duration)
+            self._interval_decision_maker.step = state_dict.get("interval_decision_maker_step", 0)
+            self._every_n_train_steps = self._interval_decision_maker.get_interval(max_ckpt_duration)
+            logging.info(f"load interval_decision_maker: {self._interval_decision_maker}")
+
+    def state_dict(self):
+        max_ckpt_duration = self._interval_decision_maker.max_ckpt_duration
+        min_step_duration = self._interval_decision_maker.min_step_duration
+        interval = self._interval_decision_maker.get_interval(max_ckpt_duration)
+        step = self._interval_decision_maker.step
+        return {
+            "interval": interval,
+            "max_ckpt_duration": max_ckpt_duration,
+            "min_step_duration": min_step_duration,
+            "interval_decision_maker_step": step,
+        }
 
 
 class SageMakerCheckpoint(SageMakerModelCheckpointBase):

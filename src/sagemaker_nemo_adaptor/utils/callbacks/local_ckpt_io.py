@@ -1,5 +1,6 @@
 import functools
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -10,6 +11,7 @@ import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
 from s3torchconnectorclient._mountpoint_s3_client import S3Exception
+from torch import multiprocessing as mp
 from torch.sagemaker import state
 from torch.sagemaker.distributed.checkpoint.async_utils import AsyncCallsQueue
 from torch.sagemaker.distributed.checkpoint.filesystem import (
@@ -47,11 +49,30 @@ def _subdirs():
                 yield f"tp{i}_ep{j}_fsdp{k}"
 
 
+class _Profiler:
+    def __init__(self):
+        ctx = mp.get_context("fork")
+        self.start = ctx.Manager().Value("d", -1.0)
+        self.end = ctx.Manager().Value("d", -1.0)
+        self._max_duration = -1.0
+
+    @property
+    def max_duration(self):
+        return self._max_duration
+
+    def update(self):
+        start = self.start.value
+        end = self.end.value
+        duration = end - start
+        self._max_duration = max(self._max_duration, duration)
+
+
 class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.app_state = SageMakerAppState()
         self.queue = AsyncCallsQueue()
+        self.profiler = _Profiler()
 
     @staticmethod
     @retry_with_jitter
@@ -62,6 +83,14 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
                 metadata = {"step": training_step}
                 torch.save(metadata, stream)
 
+    @staticmethod
+    def on_start(start, writer):
+        start.value = time.process_time()
+
+    @staticmethod
+    def on_end(end, writer):
+        end.value = time.process_time()
+
     def save_checkpoint(
         self,
         checkpoint: Dict[str, Any],
@@ -71,12 +100,28 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
         self.queue.maybe_finalize_async_calls(blocking=True, skip_sync=True)
+        self.profiler.update()
+
+        # hooks
+        on_start = functools.partial(
+            SageMakerLocalCheckpointIO.on_start,
+            self.profiler.start,
+        )
+        on_end = functools.partial(
+            SageMakerLocalCheckpointIO.on_end,
+            self.profiler.end,
+        )
         hook = functools.partial(
             SageMakerLocalCheckpointIO.write_local_metadata,
             trainer.global_step,
         )
+
         path = os.path.join(path, _subdir())
-        storage_writer = DistributedFileSystemWriter(path, post_write_hooks=[hook])
+        storage_writer = DistributedFileSystemWriter(
+            path,
+            pre_write_hooks=[on_start],
+            post_write_hooks=[hook, on_end],
+        )
         saver.async_save(
             checkpoint,
             storage_writer=storage_writer,
