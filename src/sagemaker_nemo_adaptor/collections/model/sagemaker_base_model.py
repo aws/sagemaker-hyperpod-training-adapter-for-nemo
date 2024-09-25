@@ -403,8 +403,9 @@ class SageMakerNLPBaseModel(ModelPT):
         Hook called at the end of each training batch, do logging here
         """
         loss_scalar = self._process_loss()
-        self.log("loss", loss_scalar, prog_bar=True)
-        self.log("grad_norm", self.grad_norm, prog_bar=True)
+        self.log("Loss/train", loss_scalar, prog_bar=True)
+        self.log("Norms/grad_norm", self.grad_norm, prog_bar=True)
+        self.log("LR/learning_rate", self._optimizer.param_groups[0]["lr"], prog_bar=True)
 
     def _process_loss(self):
         """General function to process loss after train/eval"""
