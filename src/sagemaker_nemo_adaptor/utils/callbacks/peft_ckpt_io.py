@@ -8,6 +8,7 @@ from nemo.utils import logging
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
 
+from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
 from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
     SageMakerBaseCheckpointIO,
 )
@@ -50,6 +51,12 @@ class SageMakerPeftCheckpointIO(SageMakerBaseCheckpointIO):
         final_model_dir = os.path.join(checkpoint_dir, "final-model")
 
         logging.info(f"Loading Base model from : {hf_model_name_or_path}")
+        # the patch for llama attention context parallel causes a crash here.
+        # we don't need the patch since the model we are loading here is only used for merging weights.
+        # therefore, we disable the patch before calling from_pretrained.
+        is_patched = patch_llama_flash_attn_cp.is_patched
+        if is_patched:
+            patch_llama_flash_attn_cp.unapply_patch()
         base_model = AutoModelForCausalLM.from_pretrained(
             hf_model_name_or_path,
             attn_implementation="flash_attention_2",
@@ -57,6 +64,8 @@ class SageMakerPeftCheckpointIO(SageMakerBaseCheckpointIO):
             use_cache=False,
             device_map="cpu",
         )
+        if is_patched:
+            patch_llama_flash_attn_cp.apply_patch()
         logging.debug(f"Base model: {base_model}")
 
         peft_model = PeftModel.from_pretrained(base_model, checkpoint_dir)

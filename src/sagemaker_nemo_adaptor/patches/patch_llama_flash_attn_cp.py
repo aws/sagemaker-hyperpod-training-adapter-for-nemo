@@ -24,24 +24,30 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
+is_patched = False
+
 original_get_extra_state = te.attention.DotProductAttention.get_extra_state
 original_LFA2__init__ = LlamaFlashAttention2.__init__
 original_LFA2_forward = LlamaFlashAttention2.forward
 
 
 def unapply_patch():
+    global is_patched
     te.attention.DotProductAttention.get_extra_state = original_get_extra_state
     LlamaFlashAttention2.__init__ = original_LFA2__init__
     LlamaFlashAttention2.forward = original_LFA2_forward
+    is_patched = False
 
 
 def apply_patch():
+    global is_patched
     # patch https://tiny.amazon.com/1dh46qr58/githNVIDTranblob8416tranpyto
     te.attention.DotProductAttention.get_extra_state = patched_get_extra_state
     # patch https://tiny.amazon.com/c5tg8rbf/githhuggtranblobmainsrctran
     LlamaFlashAttention2.__init__ = patched_LFA2__init__
     # patch https://tiny.amazon.com/lv60zw8r/githhuggtranblobmainsrctran
     LlamaFlashAttention2.forward = patched_LFA2_forward
+    is_patched = True
 
 
 def patched_get_extra_state(self, *args, **kwargs):
