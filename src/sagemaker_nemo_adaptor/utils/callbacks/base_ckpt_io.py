@@ -1,4 +1,10 @@
 from lightning_fabric.plugins import CheckpointIO
+from torch.sagemaker.distributed.checkpoint.s3_filesystem import (
+    format_s3_path,
+    get_s3_region_from_uri,
+    is_s3_uri,
+    parse_s3_uri,
+)
 
 from sagemaker_nemo_adaptor.utils.app_state import SageMakerAppState
 
@@ -7,6 +13,19 @@ class SageMakerBaseCheckpointIO(CheckpointIO):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self.app_state = SageMakerAppState()
+        self._s3_bucket = None
+        self._s3_region = None
+
+    def get_s3_region(self, path):
+        if not is_s3_uri(path):
+            return None
+        url = format_s3_path(path)
+        bucket, _ = parse_s3_uri(url)
+        if bucket == self._s3_bucket and self._s3_region:
+            return self._s3_region
+        self._s3_bucket = bucket
+        self._s3_region = get_s3_region_from_uri(url)
+        return self._s3_region
 
     def _load_data_module(self, trainer, state_dict):
         """

@@ -85,11 +85,11 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
 
     @staticmethod
     def on_start(start, writer):
-        start.value = time.process_time()
+        start.value = time.perf_counter()
 
     @staticmethod
     def on_end(end, writer):
-        end.value = time.process_time()
+        end.value = time.perf_counter()
 
     def save_checkpoint(
         self,
@@ -119,6 +119,7 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         path = os.path.join(path, _subdir())
         storage_writer = DistributedFileSystemWriter(
             path,
+            s3_region=self.get_s3_region(path),
             pre_write_hooks=[on_start],
             post_write_hooks=[hook, on_end],
         )
@@ -128,6 +129,8 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
             process_group=self.app_state.current_replication_group,
             coordinator_rank=self.app_state.replication_coordinator_rank,
             queue=self.queue,
+            force_check_all_plans=False,
+            wait_error_handling=False,
         )
 
     def load_checkpoint(

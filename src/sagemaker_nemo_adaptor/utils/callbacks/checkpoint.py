@@ -86,7 +86,10 @@ class SageMakerModelCheckpointBase(Checkpoint):
         weights_only = (
             checkpoint_type == SageMakerCheckpointType.FULL or checkpoint_type == SageMakerCheckpointType.PEFT_FULL
         )
-        trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
+        # trainer.save_checkpoint will call barrier which lead to have extra cost.
+        # https://github.com/Lightning-AI/pytorch-lightning/blob/builds/2.3.3/src/lightning/pytorch/trainer/trainer.py#L1371
+        checkpoint = trainer._checkpoint_connector.dump_checkpoint(weights_only)
+        trainer.strategy.save_checkpoint(checkpoint, checkpoint_dir, trainer)
 
 
 class _IntervalDecisionMaker:
@@ -105,10 +108,10 @@ class _IntervalDecisionMaker:
         self._interval = 0
 
     def start(self):
-        self._start = time.process_time()
+        self._start = time.perf_counter()
 
     def end(self):
-        self._end = time.process_time()
+        self._end = time.perf_counter()
         self.step += 1
 
     def get_interval(self, max_ckpt_duration):
@@ -272,7 +275,7 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
     def state_dict(self):
         max_ckpt_duration = self._interval_decision_maker.max_ckpt_duration
         min_step_duration = self._interval_decision_maker.min_step_duration
-        interval = self._interval_decision_maker.get_interval(max_ckpt_duration)
+        interval = self._interval_decision_maker._interval
         step = self._interval_decision_maker.step
         return {
             "interval": interval,

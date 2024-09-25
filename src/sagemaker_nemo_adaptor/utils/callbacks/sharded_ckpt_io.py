@@ -7,6 +7,9 @@ import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
 from lightning.fabric.utilities.cloud_io import get_filesystem
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
+from torch.sagemaker.distributed.checkpoint.filesystem import (
+    DistributedFileSystemWriter,
+)
 
 from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
     SageMakerBaseCheckpointIO,
@@ -28,11 +31,17 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
         group = self.app_state.fsdp_process_group
         saver.maybe_finalize_async_calls(blocking=True, process_group=group)
         if self.app_state.is_fsdp_action_rank:
+            storage_writer = DistributedFileSystemWriter(
+                path,
+                s3_region=self.get_s3_region(path),
+            )
             saver.async_save(
                 checkpoint,
-                checkpoint_id=path,
+                storage_writer=storage_writer,
                 process_group=self.app_state.fsdp_process_group,
                 coordinator_rank=self.app_state.fsdp_coordinator_rank,
+                force_check_all_plans=False,
+                wait_error_handling=False,
             )
 
     def load_checkpoint(

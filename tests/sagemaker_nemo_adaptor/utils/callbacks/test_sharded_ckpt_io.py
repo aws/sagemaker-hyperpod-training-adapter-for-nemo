@@ -41,17 +41,20 @@ class TestSageMakerShardedCheckpointIO:
         temp_dir = tempfile.mkdtemp()
         yield temp_dir
 
+    @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.DistributedFileSystemWriter")
     @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.saver.async_save")
-    def test_save_checkpoint(self, mock_async_save, checkpoint_io, trainer_mock, temp_dir):
+    def test_save_checkpoint(self, mock_async_save, mock_storage_writer, checkpoint_io, trainer_mock, temp_dir):
         path = f"{temp_dir}/checkpoint.ckpt"
         checkpoint_io.save_checkpoint(
             trainer_mock._checkpoint_connector.dump_checkpoint.return_value, path, trainer_mock
         )
         mock_async_save.assert_called_once_with(
             trainer_mock._checkpoint_connector.dump_checkpoint.return_value,
-            checkpoint_id=path,
+            storage_writer=mock_storage_writer.return_value,
             process_group=checkpoint_io.app_state.fsdp_process_group,
             coordinator_rank=checkpoint_io.app_state.fsdp_coordinator_rank,
+            force_check_all_plans=False,
+            wait_error_handling=False,
         )
 
     @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.loader.load")
