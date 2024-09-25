@@ -63,7 +63,15 @@ class TestSageMakerCheckpointIO:
 
     @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.SageMakerShardedCheckpointIO.teardown")
     @patch("sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io.SageMakerLocalCheckpointIO.teardown")
-    def test_teardown(self, mock_sharded_ckpt_io_teardown, mock_local_ckpt_io_teardown, checkpoint_io):
+    @patch("sagemaker_nemo_adaptor.utils.callbacks.peft_ckpt_io.SageMakerPeftShardedCheckpointIO.teardown")
+    def test_teardown(
+        self,
+        mock_sharded_ckpt_io_teardown,
+        mock_local_ckpt_io_teardown,
+        mock_peft_sharded_ckpt_io_teardown,
+        checkpoint_io,
+    ):
         checkpoint_io.teardown(None)
         mock_sharded_ckpt_io_teardown.assert_called_once()
         mock_local_ckpt_io_teardown.assert_called_once()
+        mock_peft_sharded_ckpt_io_teardown.assert_called_once()

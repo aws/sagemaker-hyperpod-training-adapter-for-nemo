@@ -84,7 +84,7 @@ class SageMakerModelCheckpointBase(Checkpoint):
         """Save one checkpoint using corresponding checkpoint type."""
         checkpoint_io.checkpoint_type = checkpoint_type
         weights_only = (
-            checkpoint_type == SageMakerCheckpointType.FULL or checkpoint_type == SageMakerCheckpointType.PEFT
+            checkpoint_type == SageMakerCheckpointType.FULL or checkpoint_type == SageMakerCheckpointType.PEFT_FULL
         )
         trainer.save_checkpoint(checkpoint_dir, weights_only, trainer)
 
@@ -398,7 +398,7 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         monitor_candidates["step"] = step.int() if isinstance(step, Tensor) else torch.tensor(trainer.global_step)
         return monitor_candidates
 
-    def _update_topk(self, new_checkpoint, checkpoint_io):
+    def _update_topk(self, new_checkpoint, checkpoint_io, checkpoint_type):
         """
         Update the topk models base on the metric value. Remove if needed.
         """
@@ -412,8 +412,7 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         if len(self._best_k_models) > self._save_top_k:
             path_to_remove = self._best_k_models[-1].checkpoint_path
             self._best_k_models.pop()
-            typ = SageMakerCheckpointType.SHARDED
-            checkpoint_io[typ].remove_checkpoint(path_to_remove)
+            checkpoint_io[checkpoint_type].remove_checkpoint(path_to_remove)
 
     def format_sharded_checkpoint_path(self, score):
         """
@@ -446,7 +445,7 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         )
         checkpoint_io = trainer.strategy.checkpoint_io
         if trainer.max_steps != trainer.global_step:
-            self._update_topk(new_checkpoint, checkpoint_io)
+            self._update_topk(new_checkpoint, checkpoint_io, SageMakerCheckpointType.SHARDED)
         return SageMakerCheckpointType.SHARDED, sharded_checkpoint_dir
 
     def _save_checkpoints(self, trainer: "pl.Trainer"):
@@ -479,12 +478,47 @@ class SageMakerCheckpointPeft(SageMakerCheckpoint):
         assert self._is_peft, "SageMakerCheckpointPeft should only be used for PEFT models"
         assert not is_s3_uri(self._checkpoint_dir), "PEFT checkpointing does not support saving to S3"
 
-    def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        pass
+    def _load_checkpoint(self, trainer, path, typ):
+        """
+        Load checkpoint from a given path with the given checkpoint type.
+        """
+        checkpoint_io = trainer.strategy.checkpoint_io
+        assert isinstance(checkpoint_io, SageMakerCheckpointIO)
+        checkpoint_io.checkpoint_type = typ
+        state_dict = trainer.strategy.load_checkpoint(path, trainer)
+        # Skip loading model state_dict as this gets loaded at model creation
+        trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
 
-    def _save_peft(self, trainer: "pl.Trainer", path):
-        path = os.path.join(path, "peft", f"steps_{trainer.global_step}")
-        return SageMakerCheckpointType.PEFT, path
+    def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        if self._resume_from_checkpoint:
+            logging.info(f"loading peft_sharded checkpoint: {self._resume_from_checkpoint}")
+            typ = SageMakerCheckpointType.PEFT_SHARDED
+            path = self._resume_from_checkpoint
+            sub_dir = f"tp{state.tp_rank}_ep{state.ep_rank}"
+            sharded_checkpoint_dir = os.path.join(path, sub_dir)
+            self._load_checkpoint(trainer, sharded_checkpoint_dir, typ)
+
+    def _save_peft_sharded(self, trainer: "pl.Trainer", path, monitor_candidates):
+        score = monitor_candidates.get(self._monitor)
+        name = self.format_sharded_checkpoint_path(score)
+        sub_dir = os.path.join(name, f"tp{state.tp_rank}_ep{state.ep_rank}")
+        sharded_checkpoint_dir = os.path.join(path, "peft_sharded", sub_dir)
+        # Get parent_dir so pruning will remove the entire checkpoint directory at step_x
+        parent_dir = os.path.dirname(sharded_checkpoint_dir)
+        new_checkpoint = TopkCheckPoint(
+            monitor=self._monitor,
+            score=score,
+            checkpoint_path=parent_dir,
+            step_at_save=trainer.global_step,
+            epoch_at_save=trainer.current_epoch,
+        )
+        checkpoint_io = trainer.strategy.checkpoint_io
+        self._update_topk(new_checkpoint, checkpoint_io, SageMakerCheckpointType.PEFT_SHARDED)
+        return SageMakerCheckpointType.PEFT_SHARDED, sharded_checkpoint_dir
+
+    def _save_peft_full(self, trainer: "pl.Trainer", path):
+        path = os.path.join(path, "peft_full", f"steps_{trainer.global_step}")
+        return SageMakerCheckpointType.PEFT_FULL, path
 
     def _save_checkpoints(self, trainer: "pl.Trainer"):
         """
@@ -494,10 +528,13 @@ class SageMakerCheckpointPeft(SageMakerCheckpoint):
         assert isinstance(checkpoint_io, SageMakerCheckpointIO)
         checkpoint_dir = self.checkpoint_dir
         checkpoint_info = []
+        monitor_candidates = self._monitor_candidates(trainer)
 
-        # Note that PEFT checkpoints reuse the configs for saving regular FULL checkpoints
+        if self._should_save_sharded(trainer, monitor_candidates):
+            checkpoint_info.append(self._save_peft_sharded(trainer, checkpoint_dir, monitor_candidates))
+        # Note that PEFT FULL checkpoints reuse the configs for saving regular FULL checkpoints
         if self._should_save_full(trainer):
-            checkpoint_info.append(self._save_peft(trainer, checkpoint_dir))
+            checkpoint_info.append(self._save_peft_full(trainer, checkpoint_dir))
 
         for checkpoint_type, checkpoint_dir in checkpoint_info:
             self._save(trainer, checkpoint_io, checkpoint_type, checkpoint_dir)

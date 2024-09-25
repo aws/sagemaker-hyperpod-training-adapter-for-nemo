@@ -108,7 +108,7 @@ class SageMakerNLPBaseModel(ModelPT):
         return (
             self._cfg.get("do_finetune", True)
             and self._cfg.get("hf_model_name_or_path", None) is not None
-            and self._cfg.get("resume_from_checkpoint", None) is None
+            and (self._cfg.get("resume_from_checkpoint", None) is None or self.use_peft)
         )
 
     @property

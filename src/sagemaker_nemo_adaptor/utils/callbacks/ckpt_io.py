@@ -16,7 +16,8 @@ from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
     SageMakerLocalCheckpointIO,
 )
 from sagemaker_nemo_adaptor.utils.callbacks.peft_ckpt_io import (
-    SageMakerPeftCheckpointIO,
+    SageMakerPeftFullCheckpointIO,
+    SageMakerPeftShardedCheckpointIO,
 )
 from sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io import (
     SageMakerShardedCheckpointIO,
@@ -29,12 +30,14 @@ class SageMakerCheckpointIO(CheckpointIO):
         sharded_checkpoint_io = SageMakerShardedCheckpointIO(*a, **kw)
         local_checkpoint_io = SageMakerLocalCheckpointIO(*a, **kw)
         full_checkpoint_io = SageMakerFullCheckpointIO(*a, **kw)
-        peft_checkpoint_io = SageMakerPeftCheckpointIO(*a, **kw)
+        peft_full_checkpoint_io = SageMakerPeftFullCheckpointIO(*a, **kw)
+        peft_sharded_checkpoint_io = SageMakerPeftShardedCheckpointIO(*a, **kw)
         self._checkpoint_io = {
             SageMakerCheckpointType.SHARDED: sharded_checkpoint_io,
             SageMakerCheckpointType.LOCAL: local_checkpoint_io,
             SageMakerCheckpointType.FULL: full_checkpoint_io,
-            SageMakerCheckpointType.PEFT: peft_checkpoint_io,
+            SageMakerCheckpointType.PEFT_FULL: peft_full_checkpoint_io,
+            SageMakerCheckpointType.PEFT_SHARDED: peft_sharded_checkpoint_io,
         }
 
     def save_checkpoint(
@@ -48,7 +51,10 @@ class SageMakerCheckpointIO(CheckpointIO):
             raise NotImplementedError(f"Checkpoint type {typ} not implemented")
         logging.info(f"save {self._checkpoint_type} checkpoint: {path}")
         # Only sharded checkpointing needs unique optimizer key
-        if "optimizer_states" in checkpoint and self._checkpoint_type == SageMakerCheckpointType.SHARDED:
+        if "optimizer_states" in checkpoint and (
+            self._checkpoint_type == SageMakerCheckpointType.SHARDED
+            or self._checkpoint_type == SageMakerCheckpointType.PEFT_SHARDED
+        ):
             optimizers = checkpoint.pop("optimizer_states")
             for i, optim in enumerate(optimizers):
                 checkpoint[f"{OPTIMIZER_KEY_PREFIX}_{i}"] = optim
@@ -88,4 +94,6 @@ class SageMakerCheckpointIO(CheckpointIO):
         checkpoint_io = self._checkpoint_io[SageMakerCheckpointType.SHARDED]
         checkpoint_io.teardown()
         checkpoint_io = self._checkpoint_io[SageMakerCheckpointType.LOCAL]
+        checkpoint_io.teardown()
+        checkpoint_io = self._checkpoint_io[SageMakerCheckpointType.PEFT_SHARDED]
         checkpoint_io.teardown()

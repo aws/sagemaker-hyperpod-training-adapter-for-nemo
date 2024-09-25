@@ -295,8 +295,12 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.sharded_model_state_dict
         if typ == SageMakerCheckpointType.FULL:
             return self.full_model_state_dict
-        if typ == SageMakerCheckpointType.PEFT:
+        if typ == SageMakerCheckpointType.PEFT_FULL:
             return self.full_model_state_dict
+        # For PEFT_SHARDED, we do not need to store the model state_dict as the adapter weights
+        # are stored separately
+        if typ == SageMakerCheckpointType.PEFT_SHARDED:
+            return None
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def sharded_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
@@ -325,11 +329,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         typ = self.checkpoint_io.checkpoint_type
         if typ == SageMakerCheckpointType.LOCAL:
             return self.local_optimizer_state_dict(optimizer)
-        if typ == SageMakerCheckpointType.SHARDED:
+        if typ == SageMakerCheckpointType.SHARDED or SageMakerCheckpointType.PEFT_SHARDED:
             return self.sharded_optimizer_state_dict(optimizer)
         if typ == SageMakerCheckpointType.FULL:
             return self.full_optimizer_state_dict(optimizer)
-        if typ == SageMakerCheckpointType.PEFT:
+        if typ == SageMakerCheckpointType.PEFT_FULL:
             return self.full_optimizer_state_dict(optimizer)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
@@ -356,15 +360,20 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             return self.load_sharded_model_state_dict(checkpoint)
         if typ == SageMakerCheckpointType.FULL:
             return self.load_full_model_state_dict(checkpoint)
-        if typ == SageMakerCheckpointType.PEFT:
-            return self.load_full_model_state_dict(checkpoint)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def load_sharded_optim_state_dict(self, trainer, checkpoint, path):
+        typ = self.checkpoint_io.checkpoint_type
+        # For PEFT_SHARDED, the checkpoint does not contain the model state_dict
+        # Use the sharded_model_state_dict as the checkpoint adapter weights will have been loaded in at this point
+        if typ == SageMakerCheckpointType.PEFT_SHARDED:
+            checkpoint_state_dict = self.sharded_model_state_dict
+        else:
+            checkpoint_state_dict = checkpoint["state_dict"]
         for i, optimizer in enumerate(trainer.optimizers):
             optimizer_key = f"{OPTIMIZER_KEY_PREFIX}_{i}"
             state_dict = load_sharded_optimizer_state_dict(
-                model_state_dict=checkpoint["state_dict"],
+                model_state_dict=checkpoint_state_dict,
                 optimizer_key=optimizer_key,
                 storage_reader=DistributedFileSystemReader(path),
             )
@@ -387,7 +396,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         typ = self.checkpoint_io.checkpoint_type
         if typ == SageMakerCheckpointType.LOCAL:
             return self.load_local_optim_state_dict(trainer, checkpoint, path)
-        if typ == SageMakerCheckpointType.SHARDED:
+        if typ == SageMakerCheckpointType.SHARDED or typ == SageMakerCheckpointType.PEFT_SHARDED:
             return self.load_sharded_optim_state_dict(trainer, checkpoint, path)
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
