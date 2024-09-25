@@ -88,6 +88,7 @@ model:
   moe_load_balancing: 'sinkhorn'
   global_token_shuffle: True
   moe_all_to_all_dispatcher: False
+  rope_theta: 10000.0
 
   # Transformer Engine
   fp8: False
