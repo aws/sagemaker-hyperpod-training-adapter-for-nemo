@@ -17,7 +17,6 @@ from tests.utils import NestedDotMap
 
 MODULE_PATH = "sagemaker_nemo_adaptor.collections.model.sagemaker_base_model"
 
-
 """
 UTILITY FUNCTIONS
 """
@@ -276,21 +275,20 @@ class TestSetupOptimization:
         assert OmegaConf.to_container(kwargs["optim_config"]) == optimizer_with_max_steps
         assert kwargs["optim_kwargs"] == {}
 
+    def test_on_train_batch_end(self, full_config, mocker):
+        """on_train_batch_end()"""
 
-def test_on_train_batch_end(full_config, mocker):
-    """on_train_batch_end()"""
+        test_process_log = "test_process_log"
+        base = build_base_model(full_config.model)
+        _process_loss_mock = mocker.patch.object(base, "_process_loss", return_value=test_process_log)
+        log_mock = mocker.patch.object(base, "log")
 
-    test_process_log = "test_process_log"
-    base = build_base_model(full_config.model)
-    _process_loss_mock = mocker.patch.object(base, "_process_loss", return_value=test_process_log)
-    log_mock = mocker.patch.object(base, "log")
+        # test
+        base.on_train_batch_end()
 
-    # test
-    base.on_train_batch_end()
-
-    # assertions
-    _process_loss_mock.assert_called_once()
-    log_mock.assert_called_once_with("loss", test_process_log, prog_bar=True)
+        # assertions
+        _process_loss_mock.assert_called_once()
+        log_mock.assert_called_once_with("loss", test_process_log, prog_bar=True)
 
 
 @pytest.mark.skip(reason="need refactor")

@@ -242,7 +242,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def optimizer_step(self, *a, **kw):
         grad_norm = clip_grad_norm_(self.pytorch_model, self.cfg.model.grad_clip)
-        logging.debug(f"grad_norm: {grad_norm}")
+        logging.debug(f"Setting grad_norm: {grad_norm} in model")
+        self.model.grad_norm = grad_norm
         super().optimizer_step(*a, **kw)
 
     def setup_environment(self) -> None:

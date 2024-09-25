@@ -404,6 +404,7 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         loss_scalar = self._process_loss()
         self.log("loss", loss_scalar, prog_bar=True)
+        self.log("grad_norm", self.grad_norm, prog_bar=True)
 
     def _process_loss(self):
         """General function to process loss after train/eval"""
