@@ -48,7 +48,6 @@ model:
   expert_model_parallel_degree: 1
   context_parallel_degree: 1
   moe: False
-  sequence_parallel: True
   activation_checkpointing: True
   activation_loading_horizon: 2
   delayed_param: True

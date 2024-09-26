@@ -49,7 +49,6 @@ model:
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 2
   moe: True
-  sequence_parallel: False
   activation_checkpointing: True
   activation_loading_horizon: 2
   delayed_param: True

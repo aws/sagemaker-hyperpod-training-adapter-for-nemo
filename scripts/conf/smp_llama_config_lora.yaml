@@ -46,7 +46,6 @@ model:
   train_batch_size: 2
   context_parallel_degree: 1
   moe: False
-  sequence_parallel: True
   activation_checkpointing: True
   activation_loading_horizon: 2
   delayed_param: False

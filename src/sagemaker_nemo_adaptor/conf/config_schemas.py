@@ -158,7 +158,6 @@ class BaseModelConfig(BaseModel):
     train_batch_size: int = Field(default=2, ge=1)
     fsdp: bool = True
     moe: bool = False
-    sequence_parallel: bool = True
     activation_checkpointing: bool = True
     activation_loading_horizon: int = Field(default=2, ge=1)
     delayed_param: bool = True
