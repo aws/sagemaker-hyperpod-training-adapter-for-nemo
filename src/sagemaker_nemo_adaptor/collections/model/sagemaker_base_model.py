@@ -130,11 +130,11 @@ class SageMakerNLPBaseModel(ModelPT):
             )
             # Using config from the pretrained model
             self.model_config = get_hf_config_from_name_or_path(self._cfg)
-            # Disable KV cache for HF models
-            if hasattr(self.model_config, "use_cache"):
-                self.model_config.use_cache = False
         else:
             self.model_config = self.get_model_config()
+        # Disable KV cache for HF models
+        if hasattr(self.model_config, "use_cache"):
+            self.model_config.use_cache = False
         # Adding delayed_param config to HF model config
         self.model_config.delayed_param = self._cfg.delayed_param
         model = self._initialize_model(self.model_config)
