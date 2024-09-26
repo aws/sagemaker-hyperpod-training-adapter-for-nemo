@@ -259,9 +259,7 @@ class BaseTrainerConfig(BaseModel):
     precision: Union[str, int] = "bf16"
     max_steps: int = Field(default=50, ge=1)
     log_every_n_steps: int = Field(default=10, ge=0)  # 0 == no logging
-
     accumulate_grad_batches: int = Field(default=1, ge=1)
-    gradient_clip_val: float = Field(default=1.0, ge=0)  # TODO: Figure out how to set up in the Trainer
 
     @model_validator(mode="after")
     def after_model_validations(self) -> "BaseTrainerConfig":
