@@ -12,7 +12,7 @@ PROGRAM="$0"
 export DOCKER_IMAGE="855988369404.dkr.ecr.us-west-2.amazonaws.com/haitao-test:kandinsky"
 
 export NODES=4
-export TEST_NAME="chehaoha_llama3_kan"
+export TEST_NAME="<user>_llama3_kan"
 export OUT_DIR="llama3_job"
 export CONTAINER_NAME="llama3_benchmark_container"
 
@@ -29,4 +29,5 @@ export PATH="${CURDIR}:${PATH}"
 "./kandinsky_run.sh" \
     -i "${DOCKER_IMAGE}" \
     -cn "${CONTAINER_NAME}" \
-    "${CURDIR}/train_llama.sh"
+    "${CURDIR}/train_llama.sh" \
+    "$@"

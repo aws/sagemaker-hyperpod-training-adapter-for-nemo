@@ -18,6 +18,9 @@ CONTAINER_NAME=$1
 # HOSTFILE=$2
 SHELL_SCRIPT=$2  # Absolute or relative to `pwd`
 
+shift 2
+EXTRA_ARGS=$@
+
 # - Derived args: N.A.
 
 echo "envs are"
@@ -28,4 +31,4 @@ env
 MASTER_ADDR=$(scontrol show hostnames | sort | head -n 1)
 NNODES=$SLURM_NTASKS
 # docker exec -w `pwd` $CONTAINER_NAME bash -c "SLURM_PROCID=$SLURM_PROCID SLURM_JOB_ID=$SLURM_JOB_ID SLURM_JOB_NAME=$SLURM_JOB_NAME $SHELL_SCRIPT --hostfile $HOSTFILE $EXTRA_ARGS"
-docker exec -w `pwd` $CONTAINER_NAME bash -c "SLURM_PROCID=$SLURM_PROCID SLURM_JOB_ID=$SLURM_JOB_ID SLURM_JOB_NAME=$SLURM_JOB_NAME $SHELL_SCRIPT -n $NNODES --master_address $MASTER_ADDR"
+docker exec -w `pwd` $CONTAINER_NAME bash -c "SLURM_PROCID=$SLURM_PROCID SLURM_JOB_ID=$SLURM_JOB_ID SLURM_JOB_NAME=$SLURM_JOB_NAME $SHELL_SCRIPT -n $NNODES --master_address $MASTER_ADDR $EXTRA_ARGS"

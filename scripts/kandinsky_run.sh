@@ -45,6 +45,6 @@ echo "container is $CONTAINER_IMAGE"
 
 srun -l ${WORK_DIR}launch_container.sh $CONTAINER_IMAGE $CONTAINER_NAME
 
-echo "Launching Job: \`$SHELL_SCRIPT\` ($MODE) ..."
+echo "Launching Job: \`$SHELL_SCRIPT $EXTRA_ARGS\` ($MODE) ..."
 
-srun -l ${WORK_DIR}launch_job.sh  $CONTAINER_NAME  $SHELL_SCRIPT
+srun -l ${WORK_DIR}launch_job.sh  $CONTAINER_NAME  $SHELL_SCRIPT $EXTRA_ARGS
