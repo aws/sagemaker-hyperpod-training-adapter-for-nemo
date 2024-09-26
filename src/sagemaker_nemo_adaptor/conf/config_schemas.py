@@ -130,7 +130,6 @@ class BaseModelDataConfig(BaseModel):
     val_dir: Optional[Union[str, list[str]]] = None
     dataset_type: Literal["hf", "synthetic"] = "hf"
     use_synthetic_data: bool = False
-    zipped_data: bool = False  # TODO: ideally we should have utils to check whether a data is zipped
 
     @model_validator(mode="after")
     def before_model_validations(self) -> "BaseModelDataConfig":

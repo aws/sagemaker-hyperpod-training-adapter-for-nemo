@@ -119,4 +119,3 @@ model:
     val_dir: ["/fsx/datasets/llama_new/val"]
     dataset_type: gpt
     use_synthetic_data: True
-    zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped

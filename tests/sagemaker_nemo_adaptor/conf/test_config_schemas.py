@@ -214,7 +214,6 @@ class Test_BaseModelDataConfig:
             "val_dir": ["/fsx/datasets/llama_new/val"],
             "dataset_type": "hf",
             "use_synthetic_data": False,
-            "zipped_data": False,
             **kwargs,
         }
 

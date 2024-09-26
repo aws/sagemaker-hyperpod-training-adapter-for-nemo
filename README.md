@@ -65,7 +65,6 @@ data:
     val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
     dataset_type: hf
     use_synthetic_data: True
-    zipped_data: False
 ```
 Additional considerations:
 1. Make sure you have a ```vocab_size``` that fits your model.

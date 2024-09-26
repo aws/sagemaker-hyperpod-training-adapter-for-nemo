@@ -111,7 +111,6 @@ model:
     val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
     dataset_type: hf
     use_synthetic_data: True
-    zipped_data: False #TODO: ideally we should have utils to check whether a data is zipped
 
   # PEFT
   peft:
