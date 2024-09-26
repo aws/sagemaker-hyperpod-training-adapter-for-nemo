@@ -60,7 +60,6 @@ def _validate_custom_recipe_extra_params(model: type[BaseModel]) -> None:
 
 def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config) -> None:
     params_not_set = set(base_config.keys()) - set(cfg.keys())
-    params_not_set.discard("internal")
 
     if params_not_set:
         msg = f"The following tunable parameters were not set on the custom recipe: {params_not_set}"

@@ -309,10 +309,6 @@ class BaseExpManager(BaseModel):
     auto_checkpoint: BaseAutoCheckpointConfig = Field(default_factory=BaseAutoCheckpointConfig)
 
 
-class BaseInternalConfig(BaseModel):
-    config_verified: bool = True
-
-
 class BaseRunConfig(BaseModel):
     name: str = "llama-8b"
     results_dir: Optional[str] = None
@@ -329,7 +325,6 @@ class BaseConfig(BaseModel):
     model: BaseModel
     trainer: BaseTrainerConfig
     exp_manager: Optional[BaseExpManager] = None
-    internal: BaseInternalConfig = Field(default_factory=BaseInternalConfig)
     run: Optional[BaseRunConfig] = None
 
     @model_validator(mode="before")

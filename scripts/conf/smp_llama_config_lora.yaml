@@ -122,6 +122,3 @@ model:
     rank: 32
     alpha: 16
     dropout: 0.1
-
-internal:
-  config_verified: false

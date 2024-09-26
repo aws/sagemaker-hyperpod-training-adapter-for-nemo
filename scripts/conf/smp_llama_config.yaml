@@ -121,6 +121,3 @@ model:
   # PEFT
   peft:
     peft_type: null # lora
-
-internal:
-  config_verified: false
