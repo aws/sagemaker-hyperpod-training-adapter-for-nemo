@@ -191,7 +191,6 @@ class BaseModelConfig(BaseModel):
     initializer_range: float | None = Field(default=None, ge=0)
     pad_token_id: int | None = None
     layernorm_epsilon: float | None = Field(default=None, ge=0)
-    attention_bias: bool | None = None
     vocab_size: int | None = Field(default=None, ge=1)
     activation: str | None = None
     num_key_value_heads: int | None = Field(default=None, ge=1)
