@@ -75,7 +75,6 @@ model:
   pad_token_id: 0
   layernorm_epsilon: 1e-5
   vocab_size: 32000
-  activation: 'gelu'
   num_key_value_heads: null
   use_flash_attention: True
   mistral_sliding_window: 4096

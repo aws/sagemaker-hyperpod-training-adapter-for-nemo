@@ -192,7 +192,6 @@ class BaseModelConfig(BaseModel):
     pad_token_id: int | None = None
     layernorm_epsilon: float | None = Field(default=None, ge=0)
     vocab_size: int | None = Field(default=None, ge=1)
-    activation: str | None = None
     num_key_value_heads: int | None = Field(default=None, ge=1)
     use_flash_attention: bool | None = None
 
