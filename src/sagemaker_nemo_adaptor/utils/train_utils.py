@@ -45,7 +45,7 @@ def apply_activation_checkpoint(
         checkpoint_fn = functools.partial(
             transformer_engine.pytorch.checkpoint,
             distribute_saved_activations=False,
-            get_cuda_rng_tracker=tsm.state.get_rng_state_tracker,
+            get_rng_state_tracker=tsm.state.get_rng_state_tracker,
             tp_group=tsm.state.tp_process_group,
         )
         checkpoint_impl = CheckpointImpl.NO_REENTRANT
