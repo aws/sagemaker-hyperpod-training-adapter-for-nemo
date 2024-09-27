@@ -53,7 +53,12 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
         assert trainer, "Bad parameter, trainer is empty"
         state_dict = trainer._checkpoint_connector.dump_checkpoint(False)
         state_dict.pop("optimizer_states")
-        loader.load(state_dict, checkpoint_id=path)
+        loader.load(
+            state_dict,
+            checkpoint_id=path,
+            process_group=self.app_state.fsdp_process_group,
+            coordinator_rank=self.app_state.fsdp_coordinator_rank,
+        )
         self.load_data_module_and_lr_schedulers(trainer, state_dict)
         logging.info(f"Loaded Sharded checkpoint")
         return state_dict

@@ -69,7 +69,12 @@ class TestSageMakerShardedCheckpointIO:
         checkpoint_io.load_checkpoint(path, trainer_mock)
 
         trainer_mock._checkpoint_connector.dump_checkpoint.assert_called_once_with(False)
-        mock_load.assert_called_once_with(state_dict, checkpoint_id=path)
+        mock_load.assert_called_once_with(
+            state_dict,
+            checkpoint_id=path,
+            process_group=checkpoint_io.app_state.fsdp_process_group,
+            coordinator_rank=checkpoint_io.app_state.fsdp_coordinator_rank,
+        )
         mock_load_data_module_and_lr_schedulers.assert_called_once_with(trainer_mock, state_dict)
 
     def test_remove_checkpoint(self, checkpoint_io, temp_dir):

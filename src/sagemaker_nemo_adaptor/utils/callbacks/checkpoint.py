@@ -69,10 +69,12 @@ class SageMakerModelCheckpointBase(Checkpoint):
         assert isinstance(checkpoint_io, SageMakerCheckpointIO)
         checkpoint_io.checkpoint_type = typ
         state_dict = trainer.strategy.load_checkpoint(path, trainer)
-        logging.debug(state_dict)
         trainer.strategy.load_model_state_dict(state_dict)
         trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
         self.load_state_dict(state_dict)
+        trainer._checkpoint_connector._loaded_checkpoint = state_dict
+        trainer._checkpoint_connector.restore_loops()
+        trainer._checkpoint_connector._loaded_checkpoint = None
 
     def _save(
         self,
@@ -312,14 +314,13 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         if "checkpoint_callback_params" in cfg.exp_manager:
             checkpoint_callback_params = cfg.exp_manager.checkpoint_callback_params
         self._save_sharded_every_n_steps = checkpoint_callback_params.get("every_n_train_steps", None)
-        self._save_last_sharded = cfg.exp_manager.export_full_model.get("save_last", True)
+        self._save_last_sharded = checkpoint_callback_params.get("save_last", True)
         self._save_top_k = checkpoint_callback_params.get("save_top_k", None)
         self._monitor = checkpoint_callback_params.get("monitor", "step")
         mode = checkpoint_callback_params.get("mode", "max")
-        assert (
-            mode in [member.value for member in SageMakerMonitorMode],
-            f"{mode} is not a valid value for {SageMakerMonitorMode.__name__}",
-        )
+        assert mode in [
+            member.value for member in SageMakerMonitorMode
+        ], f"{mode} is not a valid value for {SageMakerMonitorMode.__name__}"
         self._mode = (
             SageMakerMonitorMode.MAX if mode == SageMakerMonitorMode.MAX.value.lower() else SageMakerMonitorMode.MIN
         )

@@ -1,5 +1,6 @@
 import functools
 from contextlib import nullcontext
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
@@ -25,7 +26,6 @@ from torch.sagemaker.checkpoint.constants import (
     SMP_IS_LOAD_INFO_KEY,
     SMP_IS_PARTIAL_KEY,
 )
-from torch.sagemaker.delayed_param import DelayedParamIniter
 from torch.sagemaker.distributed.checkpoint.filesystem import (
     DistributedFileSystemReader,
 )
@@ -217,6 +217,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return param_init_fn, None, nullcontext()
 
     def _setup_smp_delayed_param(self, cfg, model):
+        # https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/sm-main/torch/sagemaker/patches/patch_manager.py#L85
+        # The monkey patch is applied during tsm.init(). This is the make sure the correct import
+        # is called. ie: RotaryPositionEmbedding will become PatchedRotaryPositionEmbedding.
+        from torch.sagemaker.delayed_param import DelayedParamIniter
+
         initer = None
         if model.do_finetune_with_pretrained_weights:
             if self.global_rank != 0:
@@ -383,7 +388,18 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             optimizer.load_state_dict(flattened_osd)
 
     def load_local_optim_state_dict(self, trainer, checkpoint, path):
-        pass
+        """Load local optimizer state_dict."""
+
+        def update_group(saved_group: Dict[str, Any], group: Dict[str, Any]) -> Dict[str, Any]:
+            saved_group["params"] = group["params"]
+            return saved_group
+
+        for i, optimizer in enumerate(trainer.optimizers):
+            groups = optimizer.param_groups
+            saved_groups = deepcopy(checkpoint["optimizer_states"][i]["param_groups"])
+
+            param_groups = [update_group(g, ng) for g, ng in zip(saved_groups, groups)]
+            optimizer.__setstate__({"param_groups": param_groups})
 
     def load_optimizer_state_dict(
         self,
@@ -410,8 +426,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         1. In case of sharded checkpoint, all ranks store unique checkpoints.
         2. In case of non-sharded checkpoint, all data-parallel rank 0 store checkpoints.
         """
-        if self.checkpoint_io.checkpoint_type == SageMakerCheckpointType.FULL and dist.get_rank() != 0:
-            return
         self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options)
 
     def load_checkpoint(

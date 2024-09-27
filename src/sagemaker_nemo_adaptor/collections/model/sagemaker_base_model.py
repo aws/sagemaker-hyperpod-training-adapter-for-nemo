@@ -294,7 +294,6 @@ class SageMakerNLPBaseModel(ModelPT):
             path,
             attn_implementation=attn,
             config=model_cfg,
-            torch_dtype=torch_dtype,
             quantization_config=quantization_config,
         )
 
@@ -303,10 +302,7 @@ class SageMakerNLPBaseModel(ModelPT):
         attn = "flash_attention_2"
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_config(model_cfg)
-        return AutoModelForCausalLM.from_config(
-            model_cfg,
-            attn_implementation=attn,
-        )
+        return AutoModelForCausalLM.from_config(model_cfg, attn_implementation=attn, torch_dtype=torch.bfloat16)
 
     def _training_step_fp8(self, batch, batch_idx, *a, **kw):
         fp8 = self._cfg.fp8
