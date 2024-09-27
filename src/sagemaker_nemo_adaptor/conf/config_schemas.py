@@ -1,3 +1,4 @@
+import os
 from typing import Any, Literal, Optional, Union
 
 from pydantic import (
@@ -261,6 +262,19 @@ class BaseTrainerConfig(BaseModel):
 
     @model_validator(mode="after")
     def after_model_validations(self) -> "BaseTrainerConfig":
+        if "LOCAL_WORLD_SIZE" in os.environ and "WORLD_SIZE" in os.environ:
+            # read from torchrun environment variables
+            actual_devices = int(os.environ["LOCAL_WORLD_SIZE"])
+            actual_num_nodes = int(os.environ["WORLD_SIZE"]) // actual_devices
+            if self.devices != actual_devices:
+                raise ValueError(
+                    f"'devices' ({self.devices}) does not equal actual number of devices ({actual_devices})"
+                )
+            if self.num_nodes != actual_num_nodes:
+                raise ValueError(
+                    f"'num_nodes' ({self.num_nodes}) does not equal actual number of nodes ({actual_num_nodes})"
+                )
+
         if self.devices % GPUS_PER_NODE != 0:
             raise ValueError(f"'devices' ({self.devices}) must be a multiple of {GPUS_PER_NODE}")
 
