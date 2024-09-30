@@ -109,6 +109,12 @@ class _IntervalDecisionMaker:
         self._end = -1
         self._interval = 0
 
+    def try_reset(self):
+        if self._interval > 0:
+            return
+        if self.min_step_duration == 0:
+            return self.reset()
+
     def start(self):
         self._start = time.perf_counter()
 
@@ -123,6 +129,8 @@ class _IntervalDecisionMaker:
             return 1
 
         step_duration = self._end - self._start
+        if step_duration == 0:
+            return 1
         self.min_step_duration = min(self.min_step_duration, step_duration)
         self.max_ckpt_duration = max(self.max_ckpt_duration, max_ckpt_duration)
         if self.step <= self.warmup_steps:
@@ -271,6 +279,7 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
             self._interval_decision_maker.min_step_duration = state_dict.get("min_step_duration", min_step_duration)
             self._interval_decision_maker.max_ckpt_duration = state_dict.get("max_ckpt_duration", max_ckpt_duration)
             self._interval_decision_maker.step = state_dict.get("interval_decision_maker_step", 0)
+            self._interval_decision_maker.try_reset()
             self._every_n_train_steps = self._interval_decision_maker.get_interval(max_ckpt_duration)
             logging.info(f"load interval_decision_maker: {self._interval_decision_maker}")
 
