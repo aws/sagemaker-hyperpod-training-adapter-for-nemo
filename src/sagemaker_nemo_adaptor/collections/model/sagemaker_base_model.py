@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Any, Dict, Optional, Union
 
@@ -69,6 +70,8 @@ class SageMakerNLPBaseModel(ModelPT):
         self.model = None
         self.use_smp = use_smp
         self.model_config = None
+
+        self.val_loss = 0
 
         # Setup Transformer Engine Variable TODO: move it inside smp library
         os.environ["NVTE_TORCH_COMPILE"] = "0"
@@ -346,6 +349,19 @@ class SageMakerNLPBaseModel(ModelPT):
             self.loss = self._training_step(batch, batch_idx, *a, **kw)
         return self.loss
 
+    def validation_step(self, batch, batch_idx):
+        """
+        Validation step
+        """
+        input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
+        val_loss = self(
+            input_ids=input_ids,
+            attention_mask=None,
+            labels=labels,
+        )["loss"]
+        self.val_loss += val_loss.detach()
+        return val_loss
+
     def _prepare_input_batch(self, batch, batch_idx):
         """
         Parse input batch, pre-process for context parallel
@@ -405,15 +421,31 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         Hook called at the end of each training batch, do logging here
         """
-        loss_scalar = self._process_loss()
+        loss_scalar = self._process_loss(self.loss, reduce_loss=self._cfg.log_reduced_training_loss)
         self.log("Loss/train", loss_scalar, prog_bar=True)
         self.log("Norms/grad_norm", self.grad_norm, prog_bar=True)
-        self.log("LR/learning_rate", self._optimizer.param_groups[0]["lr"], prog_bar=True)
+        self.log("LR/learning_rate", self.lr_schedulers().get_lr()[0], prog_bar=True)
 
-    def _process_loss(self):
+    def on_validation_epoch_end(self):
+        """
+        Hook called at the end of each validation epoch, do logging here
+        """
+        if self.trainer.global_step > 0:
+            loss_scalar = self._process_loss(self.val_loss)
+            loss_scalar /= self.trainer.num_val_batches[0]
+            ppl = math.exp(loss_scalar)
+            if dist.get_rank() == 0:
+                _logger.info(
+                    f"Done validation after step {self.global_step}, validation loss: {loss_scalar}, validation perplexity: {ppl}"
+                )
+            self.log("Loss/val", loss_scalar)
+            self.log("Loss/perplexity", ppl)
+            self.val_loss = 0
+
+    def _process_loss(self, loss, reduce_loss=True):
         """General function to process loss after train/eval"""
-        if self._cfg.log_reduced_training_loss:
-            loss_detached = self.loss.detach()
+        if reduce_loss:
+            loss_detached = loss.detach()
             dist.all_reduce(loss_detached)
             loss_scalar = loss_detached.item() / dist.get_world_size()
             return loss_scalar

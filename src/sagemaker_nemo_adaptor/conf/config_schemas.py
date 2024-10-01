@@ -257,7 +257,12 @@ class BaseTrainerConfig(BaseModel):
     precision: Union[str, int] = "bf16"
     max_steps: int = Field(default=50, ge=1)
     log_every_n_steps: int = Field(default=10, ge=0)  # 0 == no logging
-    accumulate_grad_batches: int = Field(default=1, ge=1)
+    val_check_interval: Union[float, int] = Field(
+        default=-1
+    )  # How often to check the validation set (float = fraction, int = num_batches)
+    limit_val_batches: Union[float, int] = Field(
+        default=1.0, ge=0
+    )  # How much of validation dataset to check (float = fraction, int = num_batches)
 
     @model_validator(mode="after")
     def after_model_validations(self) -> "BaseTrainerConfig":
