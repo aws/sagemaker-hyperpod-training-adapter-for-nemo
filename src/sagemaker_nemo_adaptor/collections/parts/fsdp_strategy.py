@@ -33,7 +33,6 @@ from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
     SMStateDictType,
     sm_state_dict_type,
 )
-from torch.sagemaker.grad_norm import clip_grad_norm_
 from torch.sagemaker.utils import utils as tsm_utils
 
 from sagemaker_nemo_adaptor.constants import (
@@ -246,9 +245,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         logging.info(f"Training Model:\n{self.pytorch_model}")
 
     def optimizer_step(self, *a, **kw):
-        grad_norm = clip_grad_norm_(self.pytorch_model, self.cfg.model.grad_clip)
-        logging.debug(f"Setting grad_norm: {grad_norm} in model")
-        self.model.grad_norm = grad_norm
+        logging.debug(f"Invoking optimizer_step")
         super().optimizer_step(*a, **kw)
 
     def setup_environment(self) -> None:

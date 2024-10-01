@@ -15,6 +15,7 @@ from peft import LoraConfig, PeftModel, get_peft_model
 from pytorch_lightning import Trainer
 from torch.sagemaker import transform
 from torch.sagemaker.context_parallel.utils import setup_transformer_engine_cp_groups
+from torch.sagemaker.grad_norm import clip_grad_norm_
 from torch.sagemaker.moe.moe_config import MoEConfig
 from torch.sagemaker.utils.process_group_utils import get_global_ranks
 from transformer_engine.common.recipe import DelayedScaling, Format
@@ -63,6 +64,7 @@ class SageMakerNLPBaseModel(ModelPT):
     predefined_model = False
 
     def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp=True):
+        self.grad_norm = None
         self._cfg = cfg
         self.model = None
         self.use_smp = use_smp
@@ -377,6 +379,10 @@ class SageMakerNLPBaseModel(ModelPT):
             optim_config=optim_config_cp,
             optim_kwargs=optim_kwargs,
         )
+
+    def configure_gradient_clipping(self, *args, **kwargs):
+        grad_norm = clip_grad_norm_(self.model, self._cfg.grad_clip)
+        self.grad_norm = grad_norm.detach().cpu()
 
     def configure_optimizers(self):
         self.setup_optimization()
