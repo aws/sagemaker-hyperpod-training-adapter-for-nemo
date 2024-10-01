@@ -385,7 +385,17 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             optimizer.load_state_dict(flattened_osd)
 
     def load_local_optim_state_dict(self, trainer, checkpoint, path):
-        """Load local optimizer state_dict."""
+        """Load local optimizer param_groups from state_dict.
+
+        In SageMakerLocalCheckpointIO _load function, the optimizer's states are loaded during
+        dcp loading, since states are tensors which are mutable and can be loaded in place.
+
+        In the param groups,
+        there are floats/ints that need to be loaded separately, since they are immutable.
+
+        Note: If optimizer.load_state_dict() is callled, optimizer's states will be loaded twice.
+        This function avoids the duplicate loading and ONLY load optimizer param_groups.
+        """
 
         def update_group(saved_group: Dict[str, Any], group: Dict[str, Any]) -> Dict[str, Any]:
             saved_group["params"] = group["params"]
