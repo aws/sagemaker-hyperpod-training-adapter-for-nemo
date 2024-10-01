@@ -90,7 +90,7 @@ def assert_values(value_1, value_2, key):
 class TestCheckpoint:
 
     def config(self):
-        with initialize(version_base="1.2", config_path="../../../../../scripts/conf"):
+        with initialize(version_base="1.2", config_path="../../../../../examples/llama/conf"):
             cfg = hydra.compose(config_name="smp_llama_config")
             logging.debug("\n\n************** Experiment configuration ***********")
             logging.debug(f"\n{OmegaConf.to_yaml(cfg)}")

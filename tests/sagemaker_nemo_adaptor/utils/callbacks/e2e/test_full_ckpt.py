@@ -6,7 +6,7 @@ from nemo.utils import logging
 from test_utils import TestCheckpoint
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 
-from scripts.utils import enable_dummy_sm_env
+from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
 enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
 

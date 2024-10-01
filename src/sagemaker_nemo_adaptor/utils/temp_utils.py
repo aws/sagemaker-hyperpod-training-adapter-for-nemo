@@ -1,5 +1,6 @@
 """SageMaker environment utils."""
 
+"""TODO: remove before releasing!!"""
 import os
 
 SM_ENV_KEY = "TRAINING_JOB_ARN"

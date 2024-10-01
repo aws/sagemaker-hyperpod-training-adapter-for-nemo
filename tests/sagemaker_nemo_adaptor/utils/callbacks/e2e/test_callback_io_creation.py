@@ -3,7 +3,7 @@ import os
 import pytest
 from test_utils import TestCheckpoint
 
-from scripts.utils import enable_dummy_sm_env
+from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
 enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
 
