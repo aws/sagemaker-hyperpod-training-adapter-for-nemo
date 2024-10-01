@@ -36,6 +36,7 @@ def setup_test_cfg(cfg: DictConfig):
     cfg.exp_manager.resume_from_checkpoint = None
     # trainer
     cfg.trainer.max_steps = 2
+    cfg.trainer.num_nodes = 1
 
     # Model
     cfg.model.train_batch_size = 1
@@ -127,18 +128,24 @@ class TestCheckpoint:
         """Check if the two state_dicts are the same.
 
         In particular, we check the following:
-        1. global_step.
-        2. model state_dict.
-        3. optimizer state_dict.
-        4. lr_schedulers.
-        5. data_module.
+
+        In Full mode:
+            1. model state_dict.
+
+        Other modes:
+            1. global_step.
+            2. model state_dict.
+            3. optimizer state_dict.
+            4. lr_schedulers.
+            5. data_module.
 
         Other loop related state_dicts are ommited, as we recreate the trainers.
         """
-        assert_state_dict_equal(state_dict1["global_step"], state_dict2["global_step"])
         assert_state_dict_equal(state_dict1["state_dict"], state_dict2["state_dict"])
 
         if not is_full:
+            assert_state_dict_equal(state_dict1["global_step"], state_dict2["global_step"])
+
             for opt1, opt2 in zip(state_dict1["optimizer_states"], state_dict2["optimizer_states"]):
                 assert_state_dict_equal(opt1, opt2)
 

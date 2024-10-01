@@ -62,12 +62,14 @@ class TestFullCheckpoint(TestCheckpoint):
 
         # Create a new trainer and load the checkpoint
         # A save full checkpoint can be only loaded through config.model.hf_model_name_or_path
+        # Since in full mode, we don't save global step after reaching max_steps, we will need        # to set the max_steps to 0. Otherwise, it will train from scratch and weights will change.
         config.model.hf_model_name_or_path = lastest_checkpoint.path
         config.model.do_finetune = True
+        config.trainer.max_steps = 0
         logging.info("Creating a new trainer and loading the checkpoint")
         trainer, data_module, model_module = self.create_and_fit(config)
 
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
         new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
-        # TODO: figure out why the values are slightly off.
+        self.check_correctness(old_state_dict, new_state_dict, data_module_key="", is_full=True)
         dist.barrier()
