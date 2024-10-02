@@ -262,7 +262,7 @@ class BaseTrainerConfig(BaseModel):
         default=-1
     )  # How often to check the validation set (float = fraction, int = num_batches)
     limit_val_batches: Union[float, int] = Field(
-        default=1.0, ge=0
+        default=0.0, ge=0
     )  # How much of validation dataset to check (float = fraction, int = num_batches)
 
     @model_validator(mode="after")

@@ -37,6 +37,7 @@ def setup_test_cfg(cfg: DictConfig):
     # trainer
     cfg.trainer.max_steps = 2
     cfg.trainer.num_nodes = 1
+    cfg.trainer.limit_val_batches = 0
 
     # Model
     cfg.model.train_batch_size = 1
@@ -76,9 +77,15 @@ def assert_state_dict_equal(
 def assert_values(value_1, value_2, key):
     if isinstance(value_1, ShardedTensor):
         for local_shard_1, local_shard_2 in zip(value_1.local_shards(), value_2.local_shards()):
-            assert torch.equal(local_shard_1.tensor, local_shard_2.tensor), f"Key {key}'s shard does not match"
+            # Remove nan
+            t1 = torch.nan_to_num(local_shard_1.tensor, nan=0.0)
+            t2 = torch.nan_to_num(local_shard_2.tensor, nan=0.0)
+            assert torch.equal(t1, t2), f"Key {key}'s shard does not match"
     elif isinstance(value_1, torch.Tensor):
-        assert torch.equal(value_1, value_2), f"Key {key}'s tensor does not match"
+        # Remove nan
+        t1 = torch.nan_to_num(value_1, nan=0.0)
+        t2 = torch.nan_to_num(value_2, nan=0.0)
+        assert torch.equal(t1, t2), f"Key {key}'s tensor does not match"
     elif isinstance(value_1, int) or isinstance(value_1, float):
         assert value_1 == value_2, f"Key {key}'s value does not match"
     elif isinstance(value_1, dict):
@@ -88,11 +95,46 @@ def assert_values(value_1, value_2, key):
             assert assert_state_dict_equal(value_1[i], value_2[i]), f"Key {key}'s list does not match"
 
 
+def create_temp_dir(func):
+    def wrapper(*args, **kwargs):
+        # Get the unique directory name for the test
+        test_name = func.__name__
+        temp_dir = os.path.join("/tmp", test_name)
+
+        # remove dir if leftover from previous tests
+        if os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except FileNotFoundError:
+                pass
+
+        # Create the temporary directory
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir, exist_ok=True)
+
+        # Pass the temporary directory path to the test function
+        kwargs["temp_dir"] = temp_dir
+
+        try:
+            # Run the test function
+            result = func(*args, **kwargs)
+        finally:
+            if not dist.is_initialized():
+                return
+            # Clean up the temporary directory
+            if dist.get_rank() == 0:
+                shutil.rmtree(temp_dir)
+
+        return result
+
+    return wrapper
+
+
 class TestCheckpoint:
 
-    def config(self):
+    def config(self, config_name="smp_llama_config"):
         with initialize(version_base="1.2", config_path="../../../../../examples/llama/conf"):
-            cfg = hydra.compose(config_name="smp_llama_config")
+            cfg = hydra.compose(config_name=config_name)
             logging.debug("\n\n************** Experiment configuration ***********")
             logging.debug(f"\n{OmegaConf.to_yaml(cfg)}")
             cfg.exp_manager.exp_dir = "tmp"

@@ -501,6 +501,9 @@ class SageMakerCheckpointPeft(SageMakerCheckpoint):
         state_dict = trainer.strategy.load_checkpoint(path, trainer)
         # Skip loading model state_dict as this gets loaded at model creation
         trainer.strategy.load_optimizer_state_dict(trainer, state_dict, path)
+        trainer._checkpoint_connector._loaded_checkpoint = state_dict
+        trainer._checkpoint_connector.restore_loops()
+        trainer._checkpoint_connector._loaded_checkpoint = None
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if self._resume_from_checkpoint:

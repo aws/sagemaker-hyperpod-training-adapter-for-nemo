@@ -113,7 +113,12 @@ class SageMakerPeftShardedCheckpointIO(SageMakerShardedCheckpointIO):
         state_dict = trainer._checkpoint_connector.dump_checkpoint(False)
         state_dict.pop("optimizer_states")
         state_dict.pop("state_dict")
-        loader.load(state_dict, checkpoint_id=path)
+        loader.load(
+            state_dict,
+            checkpoint_id=path,
+            process_group=self.app_state.fsdp_process_group,
+            coordinator_rank=self.app_state.fsdp_coordinator_rank,
+        )
         self.load_data_module_and_lr_schedulers(trainer, state_dict)
         logging.info(f"Loaded Sharded checkpoint for PEFT")
         return state_dict
