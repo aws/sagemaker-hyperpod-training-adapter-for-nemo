@@ -40,6 +40,7 @@ model:
   model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
   fsdp: True
   train_batch_size: 2
+  val_batch_size: 1
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1
   context_parallel_degree: 1

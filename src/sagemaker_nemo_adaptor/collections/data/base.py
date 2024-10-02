@@ -43,6 +43,7 @@ class BaseDataModule(LightningDataModule):
     def _build_dataloader(
         self,
         dataset,
+        batch_size=1,
         num_workers=0,
         shuffle=False,
     ):
@@ -63,7 +64,7 @@ class BaseDataModule(LightningDataModule):
 
         kwargs = {
             "sampler": sampler,
-            "batch_size": self.cfg.model.train_batch_size,
+            "batch_size": batch_size,
             "num_workers": num_workers,
             "collate_fn": self.collate_fn,
             "pin_memory": True,

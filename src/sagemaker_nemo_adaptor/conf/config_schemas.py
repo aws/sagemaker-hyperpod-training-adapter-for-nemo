@@ -156,6 +156,7 @@ class BaseModelConfig(BaseModel):
     model_type: str = Field(default=ModelType.LLAMA_V3.value)
 
     train_batch_size: int = Field(default=2, ge=1)
+    val_batch_size: int = Field(default=1, ge=1)
     fsdp: bool = True
     moe: bool = False
     activation_checkpointing: bool = True

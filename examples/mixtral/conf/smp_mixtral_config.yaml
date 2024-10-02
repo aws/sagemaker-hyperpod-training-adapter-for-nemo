@@ -43,6 +43,7 @@ model:
   model_type: mixtral # TODO: need functionality to parse model type automatically, this arg can stil be kept
 
   train_batch_size: 1
+  val_batch_size: 1
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 2
   moe: True

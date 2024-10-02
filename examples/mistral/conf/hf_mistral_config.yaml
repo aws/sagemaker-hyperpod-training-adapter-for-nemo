@@ -43,6 +43,7 @@ model:
   model_type: mistral # TODO: need functionality to parse model type automatically, this arg can still be kept
 
   train_batch_size: 4
+  val_batch_size: 1
   tensor_model_parallel_degree: 1
   expert_model_parallel_degree: 1
   moe: False
