@@ -1,10 +1,8 @@
 import os
 
-import pytest
 import torch.distributed as dist
 from nemo.utils import logging
-from test_utils import TestCheckpoint
-from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
+from test_utils import TestCheckpoint, skip_if_lt_x_gpu
 
 from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
@@ -13,7 +11,6 @@ enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 
 
-@skip_if_lt_x_gpu(8)
 class TestFullCheckpoint(TestCheckpoint):
 
     def turn_on_full_only(self, config):
@@ -28,7 +25,7 @@ class TestFullCheckpoint(TestCheckpoint):
         config.exp_manager.export_full_model.every_n_train_steps = 5
         config.exp_manager.export_full_model.save_last = True
 
-    @pytest.mark.parametrize("temp_dir", ["/tmp/test_full_save_and_load"], indirect=True)
+    @skip_if_lt_x_gpu(8)
     def test_full_save_and_load(self, temp_dir):
         # Config set up
         config = self.config()

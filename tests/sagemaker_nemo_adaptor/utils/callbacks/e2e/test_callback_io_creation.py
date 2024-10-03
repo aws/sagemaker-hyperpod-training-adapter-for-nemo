@@ -18,27 +18,6 @@ from sagemaker_nemo_adaptor.utils.callbacks.ckpt_io import SageMakerCheckpointIO
 
 class TestCheckpointCreation(TestCheckpoint):
 
-    def update_checkpoint_config(self, config, checkpoint_param):
-        """Update the checkpoint config to use the same model config as the training config."""
-        save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type = (
-            checkpoint_param
-        )
-        # sharded
-        config.exp_manager.checkpoint_callback_params.save_top_k = save_top_k
-        config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
-
-        # resilience
-        config.exp_manager.auto_checkpoint.enabled = auto_checkpoint
-
-        # full
-        config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
-        config.exp_manager.export_full_model.save_last = save_full_last
-
-        # peft
-        config.model.peft.peft_type = peft_type
-
-        return config
-
     @pytest.mark.parametrize(
         "save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type",
         [  # all off
@@ -62,7 +41,6 @@ class TestCheckpointCreation(TestCheckpoint):
             (10, True, True, 0, True, "lora"),
         ],
     )
-    @pytest.mark.parametrize("temp_dir", ["/tmp/test_callback_io_creation"], indirect=True)
     def test_callback_io_creation(
         self, save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type, temp_dir
     ):

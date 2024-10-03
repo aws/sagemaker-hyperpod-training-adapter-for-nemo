@@ -1,5 +1,6 @@
 import os
 import shutil
+from functools import wraps
 from typing import Dict
 
 import hydra
@@ -11,11 +12,32 @@ from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 from torch.distributed._sharded_tensor import ShardedTensor
+from torch.testing._internal.common_distributed import TEST_SKIPS
 
 from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
 from sagemaker_nemo_adaptor.utils.config_utils import validate_config
 from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
+from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
+
+def skip_if_lt_x_gpu(x):
+    """
+    This is from torch/testing/_internal/common_distributed.py
+    Instead of using sys.exit() which marks as FAIL, we use os.exit() to exit
+    the process gracefully.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if torch.cuda.is_available() and torch.cuda.device_count() >= x:
+                return func(*args, **kwargs)
+            os.exit(TEST_SKIPS[f"multi-gpu-{x}"].exit_code)
+
+        return wrapper
+
+    return decorator
 
 
 @validate_config()
@@ -74,7 +96,9 @@ def assert_state_dict_equal(
     return True
 
 
-def assert_values(value_1, value_2, key):
+def assert_values(value_1, value_2, key=None):
+    if key is None:
+        key = ""
     if isinstance(value_1, ShardedTensor):
         for local_shard_1, local_shard_2 in zip(value_1.local_shards(), value_2.local_shards()):
             # Remove nan
@@ -140,28 +164,15 @@ class TestCheckpoint:
             cfg.exp_manager.exp_dir = "tmp"
             return setup_test_cfg(cfg)
 
-    @pytest.fixture
-    def temp_dir(self, request):
-        # TODO(htzhong): Find a better way to create the tmp and broadcast to the other ranks.
-        # Currently the name of the tests are used to create the exp_dir as we don't have
-        # the shared file system.
-        path = request.param
-        if os.path.exists(path):
-            shutil.rmtree(path)
-        os.mkdir(path)
-        yield path
-        if not dist.is_initialized():
-            return
-        logging.info("removing")
-        if dist.get_rank() == 0:
-            shutil.rmtree(path)
-        dist.barrier()
-
-    def create_and_fit(self, config):
+    def create_and_fit(self, config, callbacks=None):
         """Create a trainer, model and datamoudle then run fit."""
         trainer, data_module = SageMakerTrainerBuilder(config).create_trainer()
         exp_manager(trainer, config.exp_manager)
         model_module = SageMakerLlamaModel(config.model, trainer, use_smp=config.use_smp)
+        if callbacks:
+            if not isinstance(callbacks, list):
+                callbacks = [callbacks]
+            trainer.callbacks.extend(callbacks)
         # train
         trainer.fit(model_module, datamodule=data_module)
         return trainer, data_module, model_module
@@ -196,3 +207,82 @@ class TestCheckpoint:
 
             for data_module1, data_module2 in zip(state_dict1[data_module_key], state_dict2[data_module_key]):
                 assert_state_dict_equal(data_module1, data_module2)
+
+    def update_checkpoint_config(self, config, checkpoint_param):
+        """Update the checkpoint config to use the same model config as the training config."""
+        save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type = (
+            checkpoint_param
+        )
+        # sharded
+        config.exp_manager.checkpoint_callback_params.save_top_k = save_top_k
+        config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
+
+        # resilience
+        config.exp_manager.auto_checkpoint.enabled = auto_checkpoint
+
+        # full
+        config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
+        config.exp_manager.export_full_model.save_last = save_full_last
+
+        # peft
+        config.model.peft.peft_type = peft_type
+
+        return config
+
+    def config_for_setup(self, temp_path):
+        config = self.config()
+        config.exp_manager.exp_dir = temp_path
+        # Turn off all the checkpointing.
+        return self.update_checkpoint_config(config, (0, False, False, 0, False, None))
+
+    @pytest.fixture
+    def cuda_available(self):
+        """Check if cuda is available."""
+        return torch.cuda.is_available() and torch.cuda.device_count() >= 8
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path, cuda_available):
+        """Create a temporary directory for the test.
+
+        Here we use the rank0's pytest tmp_path as the tmp_dir.
+        We do it by:
+        1. setup the lighhtnigh trainer.
+        2. we don't run anything but setup the process_group.
+            Note that if we don't use pytorch lightning trainer to
+            setup the process_group, Some of the ports will be occupied
+            and caused hang.
+        3. Logging is disabled during the process and re-enabled afterwards.
+        4. We broadcast the temp_dir to all the ranks.
+        """
+        if not cuda_available:
+            pytest.skip("CUDA is not available, skipping the test")
+
+        # Disable logging during setup to avoid confusion.
+        Logger().get_logger().disabled = True
+        logging._logger.disabled = True
+        config = self.config_for_setup(tmp_path)
+        config.exp_manager.exp_dir = tmp_path
+        config.trainer.max_steps = 0
+
+        # Set up the process group in pytorch lightning, but no training happens.
+        self.create_and_fit(config)
+
+        if dist.get_rank() == 0:
+            temp_dir = tmp_path
+            print(f"Using temp directory: {temp_dir}")
+        else:
+            temp_dir = ""
+        object_list = [temp_dir]
+
+        # Broadcast temp_dir to all the other ranks
+        dist.broadcast_object_list(object_list)
+        temp_dir = object_list[0]
+
+        # Re-enable logging after setup.
+        Logger().get_logger().disabled = False
+        logging._logger.disabled = False
+
+        yield temp_dir
+        if dist.get_rank() == 0:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        dist.barrier()
