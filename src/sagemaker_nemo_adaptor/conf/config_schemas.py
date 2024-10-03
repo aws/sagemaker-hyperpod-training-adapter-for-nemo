@@ -196,6 +196,15 @@ class BaseModelConfig(BaseModel):
     num_key_value_heads: int | None = Field(default=None, ge=1)
     use_flash_attention: bool | None = None
 
+    rope_theta: float = Field(default=10000.0)
+
+    # rope scaling
+    rope_scaling_type: Literal["llama3", None] = None
+    rope_scaling_factor: float = Field(default=8.0)
+    rope_scaling_high_freq_factor: float = Field(default=4.0)
+    rope_scaling_low_freq_factor: float = Field(default=1.0)
+    rope_scaling_original_max_position_embeddings: int = Field(default=8192)
+
     # fp8
     fp8: bool = True
     fp8_amax_history_len: int = Field(default=1024, ge=1)
