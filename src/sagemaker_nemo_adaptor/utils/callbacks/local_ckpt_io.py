@@ -119,7 +119,6 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         path = os.path.join(path, _subdir())
         storage_writer = DistributedFileSystemWriter(
             path,
-            s3_region=self.get_s3_region(path),
             pre_write_hooks=[on_start],
             post_write_hooks=[hook, on_end],
         )

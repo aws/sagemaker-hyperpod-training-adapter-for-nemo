@@ -31,10 +31,7 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
         group = self.app_state.fsdp_process_group
         saver.maybe_finalize_async_calls(blocking=True, process_group=group)
         if self.app_state.is_fsdp_action_rank:
-            storage_writer = DistributedFileSystemWriter(
-                path,
-                s3_region=self.get_s3_region(path),
-            )
+            storage_writer = DistributedFileSystemWriter(path)
             saver.async_save(
                 checkpoint,
                 storage_writer=storage_writer,
