@@ -61,7 +61,7 @@ class TestPeftCheckpoint(TestCheckpoint):
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.turn_on_full_only(config)
 
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
 
         full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "full")
@@ -102,7 +102,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         # Turn on fine tuning
         config.model.do_finetune = True
 
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_SHARDED
         old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
         old_model_weights = trainer.strategy.sharded_model_state_dict
@@ -132,7 +132,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_SHARDED
         new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
         new_model_weights = trainer.strategy.sharded_model_state_dict
@@ -172,7 +172,7 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
         # Turn on fine tuning
         config.model.do_finetune = True
 
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_FULL
 
         full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "peft_full")
@@ -209,7 +209,7 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
         config.model.hf_model_name_or_path = final_model_dir
         config.model.do_finetune = True
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
         # TODO: figure out how to check correctness of the fully merged model after loading
 
         del trainer, data_module, model_module

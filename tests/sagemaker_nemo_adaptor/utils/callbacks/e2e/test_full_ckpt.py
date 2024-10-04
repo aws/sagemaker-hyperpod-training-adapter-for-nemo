@@ -1,8 +1,10 @@
 import os
+from unittest.mock import patch
 
+import pytest
 import torch.distributed as dist
 from nemo.utils import logging
-from test_utils import TestCheckpoint, skip_if_lt_x_gpu
+from test_utils import TestCheckpoint, assert_state_dict_equal, skip_if_lt_x_gpu
 
 from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
@@ -13,27 +15,17 @@ from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 
 class TestFullCheckpoint(TestCheckpoint):
 
-    def turn_on_full_only(self, config):
-        # turn off auto checkpointing
-        config.exp_manager.auto_checkpoint.enabled = False
-
-        # turn on generic checkpointing
-        config.exp_manager.checkpoint_callback_params.save_last = False
-        config.exp_manager.checkpoint_callback_params.save_top_k = 0
-
-        # turn off full checkpointing
-        config.exp_manager.export_full_model.every_n_train_steps = 5
-        config.exp_manager.export_full_model.save_last = True
-
     @skip_if_lt_x_gpu(8)
     def test_full_save_and_load(self, temp_dir):
         # Config set up
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
-        self.turn_on_full_only(config)
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.FULL)
 
-        trainer, data_module, model_module = self.create_and_fit(config)
+        sample = self.generate_sample(config)
+
+        trainer, data_module, model_module, old_outputs = self.create_and_fit(config, sample=sample)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
         old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
 
@@ -59,14 +51,76 @@ class TestFullCheckpoint(TestCheckpoint):
 
         # Create a new trainer and load the checkpoint
         # A save full checkpoint can be only loaded through config.model.hf_model_name_or_path
-        # Since in full mode, we don't save global step after reaching max_steps, we will need        # to set the max_steps to 0. Otherwise, it will train from scratch and weights will change.
+        # Since in full mode, we don't save global step after reaching max_steps, we will need
+        # to set the max_steps to 0. Otherwise, it will train from scratch and weights will change.
         config.model.hf_model_name_or_path = lastest_checkpoint.path
         config.model.do_finetune = True
         config.trainer.max_steps = 0
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, new_outputs = self.create_and_fit(config, sample=sample)
 
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
         new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
         self.check_correctness(old_state_dict, new_state_dict, data_module_key="", is_full=True)
+
+        assert_state_dict_equal(old_outputs, new_outputs)
         dist.barrier()
+
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "save_full_last, every_n_train_steps",
+        [
+            (False, 2),
+            (True, 2),
+        ],
+    )
+    def test_full_max_save(self, save_full_last, every_n_train_steps, temp_dir):
+        # Config set up
+        config = self.config()
+        config.exp_manager.exp_dir = temp_dir
+        config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.FULL)
+        max_steps = 7
+        config.trainer.max_steps = max_steps
+
+        config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
+        config.exp_manager.export_full_model.save_last = save_full_last
+
+        self.create_and_fit(
+            config,
+        )
+
+        full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "full")
+        assert os.path.exists(full_checkpoint_dir)
+        num_checkpoints_save = config.trainer.max_steps // every_n_train_steps
+        # Check if extra last step is saved.
+        if save_full_last:
+            num_checkpoints_save += int(max_steps % every_n_train_steps > 0)
+        assert len(list(os.scandir(full_checkpoint_dir))) == num_checkpoints_save
+
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "max_steps, save_full_last, every_n_train_steps",
+        [
+            (7, True, 2),
+            (7, False, 2),
+            (6, True, 3),
+        ],
+    )
+    @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
+    def test_full_save_calls(self, mock_save, max_steps, save_full_last, every_n_train_steps, temp_dir):
+        # Config set up
+        config = self.config()
+        config.exp_manager.exp_dir = temp_dir
+        config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.FULL)
+
+        config.trainer.max_steps = max_steps
+        config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
+        config.exp_manager.export_full_model.save_last = save_full_last
+
+        expected_call_counts = int(config.trainer.max_steps / every_n_train_steps)
+        if max_steps % every_n_train_steps != 0 and save_full_last:
+            expected_call_counts += 1
+        self.create_and_fit(config)
+        assert mock_save.call_count == expected_call_counts

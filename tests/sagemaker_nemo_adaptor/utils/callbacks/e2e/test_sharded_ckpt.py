@@ -1,8 +1,10 @@
 import os
+from unittest.mock import patch
 
+import pytest
 import torch.distributed as dist
 from nemo.utils import logging
-from test_utils import TestCheckpoint, skip_if_lt_x_gpu
+from test_utils import TestCheckpoint, assert_state_dict_equal, skip_if_lt_x_gpu
 
 from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
@@ -13,28 +15,17 @@ from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 
 class TestShardedCheckpoint(TestCheckpoint):
 
-    def turn_on_sharded_only(self, config):
-        # turn off auto checkpointing
-        config.exp_manager.auto_checkpoint.enabled = False
-
-        # turn on sharded checkpointing
-        config.exp_manager.checkpoint_callback_params.save_last = True
-        config.exp_manager.checkpoint_callback_params.save_top_k = 3
-        config.exp_manager.checkpoint_callback_params.every_n_train_steps = 5
-
-        # turn off full checkpointing
-        config.exp_manager.export_full_model.every_n_train_steps = 0
-        config.exp_manager.export_full_model.save_last = False
-
     @skip_if_lt_x_gpu(8)
     def test_sharded_save_and_load(self, temp_dir):
         # Config set up
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
-        self.turn_on_sharded_only(config)
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.SHARDED)
 
-        trainer, data_module, model_module = self.create_and_fit(config)
+        sample = self.generate_sample(config)
+
+        trainer, data_module, model_module, old_outputs = self.create_and_fit(config, sample=sample)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.SHARDED
         old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
 
@@ -62,9 +53,72 @@ class TestShardedCheckpoint(TestCheckpoint):
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module = self.create_and_fit(config)
+        trainer, data_module, model_module, new_outputs = self.create_and_fit(config, sample=sample)
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.SHARDED
         new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
 
         self.check_correctness(old_state_dict, new_state_dict, data_module.__class__.__qualname__)
+        assert_state_dict_equal(old_outputs, new_outputs)
         dist.barrier()
+
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "save_top_k, sharded_save_last, every_n_train_steps",
+        [
+            (2, False, 2),
+            (2, True, 2),
+        ],
+    )
+    def test_sharded_max_save(self, save_top_k, sharded_save_last, every_n_train_steps, temp_dir):
+        # Config set up
+        config = self.config()
+        config.exp_manager.exp_dir = temp_dir
+        config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.SHARDED)
+        max_steps = 7
+        config.trainer.max_steps = max_steps
+
+        config.exp_manager.checkpoint_callback_params.save_top_k = save_top_k
+        config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
+        config.exp_manager.checkpoint_callback_params.every_n_train_steps = every_n_train_steps
+
+        self.create_and_fit(
+            config,
+        )
+
+        sharded_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "sharded")
+        assert os.path.exists(sharded_checkpoint_dir)
+        num_checkpoints_save = max_steps // every_n_train_steps
+        if num_checkpoints_save > save_top_k:
+            num_checkpoints_save = save_top_k
+        # Check if extra last step is saved.
+        if sharded_save_last:
+            num_checkpoints_save += int(max_steps % every_n_train_steps > 0)
+        assert len(list(os.scandir(sharded_checkpoint_dir))) == num_checkpoints_save
+
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "max_steps, sharded_save_last, every_n_train_steps",
+        [
+            (7, True, 2),
+            (7, False, 2),
+            (6, True, 3),
+        ],
+    )
+    @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
+    def test_sharded_save_calls(self, mock_save, max_steps, sharded_save_last, every_n_train_steps, temp_dir):
+        # Config set up
+        config = self.config()
+        config.exp_manager.exp_dir = temp_dir
+        config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.SHARDED)
+
+        config.trainer.max_steps = max_steps
+        config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
+        config.exp_manager.checkpoint_callback_params.every_n_train_steps = every_n_train_steps
+
+        expected_call_counts = int(config.trainer.max_steps / every_n_train_steps)
+        if max_steps % every_n_train_steps != 0 and sharded_save_last:
+            expected_call_counts += 1
+        self.create_and_fit(config)
+        assert mock_save.call_count == expected_call_counts

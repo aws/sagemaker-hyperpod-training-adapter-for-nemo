@@ -16,6 +16,7 @@ from torch.testing._internal.common_distributed import TEST_SKIPS
 
 from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
+from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.config_utils import validate_config
 from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
@@ -164,7 +165,7 @@ class TestCheckpoint:
             cfg.exp_manager.exp_dir = "tmp"
             return setup_test_cfg(cfg)
 
-    def create_and_fit(self, config, callbacks=None):
+    def create_and_fit(self, config, callbacks=None, sample=None):
         """Create a trainer, model and datamoudle then run fit."""
         trainer, data_module = SageMakerTrainerBuilder(config).create_trainer()
         exp_manager(trainer, config.exp_manager)
@@ -175,7 +176,12 @@ class TestCheckpoint:
             trainer.callbacks.extend(callbacks)
         # train
         trainer.fit(model_module, datamodule=data_module)
-        return trainer, data_module, model_module
+
+        # Run one manuual step.
+        outputs = {}
+        if sample:
+            outputs = self.run_step(trainer, model_module, sample)
+        return trainer, data_module, model_module, outputs
 
     def check_correctness(self, state_dict1, state_dict2, data_module_key, is_full=False):
         """Check if the two state_dicts are the same.
@@ -216,9 +222,13 @@ class TestCheckpoint:
         # sharded
         config.exp_manager.checkpoint_callback_params.save_top_k = save_top_k
         config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
+        config.exp_manager.checkpoint_callback_params.every_n_train_steps = 5
 
         # resilience
         config.exp_manager.auto_checkpoint.enabled = auto_checkpoint
+        config.exp_manager.auto_checkpoint.warmup_steps = 0
+        config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 0
+        config.exp_manager.auto_checkpoint.interval_guard = 1.25
 
         # full
         config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
@@ -228,6 +238,20 @@ class TestCheckpoint:
         config.model.peft.peft_type = peft_type
 
         return config
+
+    def update_checkpoint_config_with_type(self, config, type=None):
+        # Default to turn off all checkpointing.
+        # Each entry in checkpoint_param maps to
+        # (save_top_k, sharded_save_last, auto_checkpoint,
+        #  every_n_train_steps, save_full_last, peft_type) correspondingly.
+        checkpoint_param = (0, False, False, 0, False, None)
+        if type == SageMakerCheckpointType.FULL:
+            checkpoint_param = (0, False, False, 5, True, None)
+        elif type == SageMakerCheckpointType.SHARDED:
+            checkpoint_param = (3, True, False, 0, False, None)
+        elif type == SageMakerCheckpointType.LOCAL:
+            checkpoint_param = (0, False, True, 0, False, None)
+        self.update_checkpoint_config(config, checkpoint_param)
 
     def config_for_setup(self, temp_path):
         config = self.config()
@@ -239,6 +263,53 @@ class TestCheckpoint:
     def cuda_available(self):
         """Check if cuda is available."""
         return torch.cuda.is_available() and torch.cuda.device_count() >= 8
+
+    def generate_sample(self, config):
+        """Generate a random sample."""
+        vocab_size = config.model.vocab_size
+        seqlen = config.model.max_context_width
+        global_rank = dist.get_rank()
+        sample_inputs = (
+            torch.randint(
+                vocab_size - 2 * global_rank,
+                (
+                    1,
+                    seqlen,
+                ),
+                dtype=torch.long,
+            )
+            + global_rank
+        )
+        labels = sample_inputs + global_rank
+        return sample_inputs, labels
+
+    def run_step(self, trainer, model_module, sample):
+        """Manually run a forward + backward.
+
+        Then retrieve the loss, logits, and gradients.
+
+        steps:
+        1. forward
+        2. zero grad
+        3. backward
+        Note: We don't run optimizer.step() here, as we want to keep the
+        model + optimizer state_dict intact for comparison.
+        """
+        inputs, labels = sample
+        outputs = model_module.forward(input_ids=inputs, labels=labels)
+        loss = outputs["loss"]
+        logits = outputs["logits"]
+
+        trainer.optimizers[0].zero_grad()
+
+        model_module.backward(loss)
+
+        grads = []
+        for param_group in trainer.optimizers[0].param_groups:
+            for param in param_group["params"]:
+                if param.grad is not None:
+                    grads.append(param.grad.view(-1))
+        return {"loss": loss, "logits": logits, "grads": torch.cat(grads).clone()}
 
     @pytest.fixture
     def temp_dir(self, tmp_path, cuda_available):

@@ -452,7 +452,7 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         new_checkpoint = TopkCheckPoint(
             monitor=self._monitor,
             score=score,
-            checkpoint_path=sharded_checkpoint_dir,
+            checkpoint_path=os.path.dirname(sharded_checkpoint_dir),
             step_at_save=trainer.global_step,
             epoch_at_save=trainer.current_epoch,
         )
