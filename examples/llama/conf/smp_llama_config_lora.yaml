@@ -9,6 +9,7 @@ trainer:
   limit_val_batches: 0 # Number of batches per each validation run, set to 0 to disable validation.
 
 
+
 exp_manager:
   exp_dir: ???
   name: experiment
@@ -84,7 +85,7 @@ model:
 
   precision: ${trainer.precision}
 
-  lr_decay_iters: 47683
+  lr_decay_iters: ${trainer.max_steps}
 
   log_reduced_training_loss: True
 
@@ -98,7 +99,7 @@ model:
     - 0.98
     sched:
       name: CosineAnnealing
-      warmup_steps: 500
+      warmup_steps: 0
       constant_steps: 0
       min_lr: 2e-5
 
