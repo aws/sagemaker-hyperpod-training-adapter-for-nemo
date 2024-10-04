@@ -141,6 +141,14 @@ class BaseModelDataConfig(BaseModel):
         return self
 
 
+class BaseModelNsysProfileConfig(BaseModel):
+    enabled: bool = False
+    start_step: int = 10
+    end_step: int = 10
+    ranks: list = [0]
+    gen_shape: bool = False
+
+
 class BaseModelPeftConfig(BaseModel):
     peft_type: Optional[Literal["lora", "qlora_4bit"]] = None
     rank: int = Field(default=32, ge=1)
@@ -225,6 +233,7 @@ class BaseModelConfig(BaseModel):
     # CHILD CONFIGS
     optim: BaseModelOptimizerConfig = Field(default_factory=BaseModelOptimizerConfig)
     data: BaseModelDataConfig = Field(default_factory=lambda: BaseModelDataConfig(use_synthetic_data=True))
+    nsys_profile: BaseModelNsysProfileConfig = Field(default_factory=BaseModelNsysProfileConfig)
     peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
 
     @model_validator(mode="before")

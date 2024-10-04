@@ -2,6 +2,7 @@ import logging
 import sys
 from typing import Union
 
+from nemo.lightning.pytorch.callbacks import NsysCallback
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 
@@ -23,7 +24,7 @@ try:
     )
 
     SUPPORT_CHECKPOINT = True
-except:
+except ImportError:
     SUPPORT_CHECKPOINT = False
 
 
@@ -84,6 +85,58 @@ class SageMakerTrainerBuilder:
         auto_checkpoint = self.cfg.exp_manager.auto_checkpoint
         return auto_checkpoint.get("enabled", False)
 
+    def _create_checkpoint_callbacks(self):
+        callbacks = []
+        if not SUPPORT_CHECKPOINT:
+            return callbacks
+
+        exp_manager = self.cfg.exp_manager
+        # PEFT checkpointing callback.
+        if self.cfg.model.peft.peft_type is not None:
+            if self.use_generic_checkpoint:
+                callbacks.append(SageMakerCheckpointPeft(self.cfg))
+            # If using PEFT, do not use regular checkpoint callbacks as they may fail
+            return callbacks
+
+        # Resilience checkpointing callback.
+        if self.use_resilience_checkpoint:
+            # If user specify a path to resume, disable auto resume.
+            enabled_auto_reload = exp_manager.resume_from_checkpoint == None
+            warmup_steps = exp_manager.auto_checkpoint.warmup_steps
+            drop_n_warmup_steps = exp_manager.auto_checkpoint.drop_n_warmup_steps
+            interval_guard = exp_manager.auto_checkpoint.interval_guard
+            callbacks.append(
+                SageMakerModelCheckpointResilience(
+                    enable_auto_reload=enabled_auto_reload,
+                    checkpoint_dir=exp_manager.get("checkpoint_dir", None),
+                    warmup_steps=warmup_steps,
+                    drop_n_warmup_steps=drop_n_warmup_steps,
+                    interval_guard=interval_guard,
+                )
+            )
+        # Generic checkpointing callback.
+        if self.use_generic_checkpoint:
+            callbacks.append(SageMakerCheckpoint(self.cfg))
+        return callbacks
+
+    def _create_nsys_callbacks(self):
+        nsys_profile = self.cfg.model.get("nsys_profile", None)
+        if not nsys_profile:
+            return []
+
+        enabled = nsys_profile.get("enabled", False)
+        if not enabled:
+            return []
+
+        return [
+            NsysCallback(
+                start_step=nsys_profile.get("start_step", 10),
+                end_step=nsys_profile.get("end_step", 10),
+                ranks=nsys_profile.get("ranks", [0]),
+                gen_shape=nsys_profile.get("gen_shape", False),
+            )
+        ]
+
     def _create_plugins(self) -> list:
         plugins = []
 
@@ -95,35 +148,8 @@ class SageMakerTrainerBuilder:
     def _create_callbacks(self, callbacks=None) -> list:
         assert callbacks is None or isinstance(callbacks, list)
         callbacks = callbacks if callbacks else []
-
-        if SUPPORT_CHECKPOINT:
-            exp_manager = self.cfg.exp_manager
-            # PEFT checkpointing callback.
-            if self.cfg.model.peft.peft_type is not None:
-                if self.use_generic_checkpoint:
-                    callbacks.append(SageMakerCheckpointPeft(self.cfg))
-                # If using PEFT, do not use regular checkpoint callbacks as they may fail
-                return callbacks
-
-            # Resilience checkpointing callback.
-            if self.use_resilience_checkpoint:
-                # If user specify a path to resume, disable auto resume.
-                enabled_auto_reload = exp_manager.resume_from_checkpoint == None
-                warmup_steps = exp_manager.auto_checkpoint.warmup_steps
-                drop_n_warmup_steps = exp_manager.auto_checkpoint.drop_n_warmup_steps
-                interval_guard = exp_manager.auto_checkpoint.interval_guard
-                callbacks.append(
-                    SageMakerModelCheckpointResilience(
-                        enable_auto_reload=enabled_auto_reload,
-                        checkpoint_dir=exp_manager.get("checkpoint_dir", None),
-                        warmup_steps=warmup_steps,
-                        drop_n_warmup_steps=drop_n_warmup_steps,
-                        interval_guard=interval_guard,
-                    )
-                )
-            # Generic checkpointing callback.
-            if self.use_generic_checkpoint:
-                callbacks.append(SageMakerCheckpoint(self.cfg))
+        callbacks += self._create_nsys_callbacks()
+        callbacks += self._create_checkpoint_callbacks()
         return callbacks
 
     def _create_data_module(self, trainer):
