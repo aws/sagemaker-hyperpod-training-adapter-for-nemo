@@ -47,6 +47,7 @@ def apply_activation_checkpoint(
             distribute_saved_activations=False,
             get_rng_state_tracker=tsm.state.get_rng_state_tracker,
             tp_group=tsm.state.tp_process_group,
+            use_reentrant=False,
         )
         checkpoint_impl = CheckpointImpl.NO_REENTRANT
     else:
