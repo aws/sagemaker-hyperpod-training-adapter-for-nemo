@@ -9,6 +9,8 @@ class SageMakerMixtralModel(SageMakerNLPBaseModel):
     Lightning Model class for Mixtral
     """
 
+    predefined_model = True
+
     def get_model_config(self):
         """
         Get model config for Mixtral

@@ -28,7 +28,6 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
             ), f"model_type is set to llama but hf_model_name_or_path is not the same model, getting {type(model_config)}"
             # Update the config based on user's input
             model_config.update(configurable_dict)
-            model_config.rope_scaling = None  # TODO Add support once Rubik is ready
         else:
             rope_scaling = None
             if self._cfg.rope_scaling_type == "llama3":

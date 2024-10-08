@@ -32,7 +32,6 @@ class SageMakerMistralModel(SageMakerNLPBaseModel):
                 bos_token_id=1,
                 eos_token_id=2,
                 tie_word_embeddings=False,
-                rope_theta=10000.0,
                 attention_dropout=0.0,
             )
         return model_config

@@ -42,12 +42,12 @@ class TestCheckpointCreation(TestCheckpoint):
         ],
     )
     def test_callback_io_creation(
-        self, save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type, temp_dir
+        self, save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type, tmp_path
     ):
         """Test that the callback io creation works as expected."""
         config = self.config()
-        config.exp_manager.exp_dir = temp_dir
-        config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        config.exp_manager.exp_dir = tmp_path
+        config.exp_manager.checkpoint_dir = os.path.join(tmp_path, "checkpoints")
         config = self.update_checkpoint_config(
             config, (save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type)
         )

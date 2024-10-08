@@ -1,7 +1,8 @@
 import os
 import shutil
+from dataclasses import dataclass
 from functools import wraps
-from typing import Dict
+from typing import Dict, Union
 
 import hydra
 import pytest
@@ -14,12 +15,54 @@ from omegaconf.omegaconf import OmegaConf
 from torch.distributed._sharded_tensor import ShardedTensor
 from torch.testing._internal.common_distributed import TEST_SKIPS
 
-from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
+from sagemaker_nemo_adaptor.collections.model.nlp import (
+    SageMakerLlamaModel,
+    SageMakerMistralModel,
+    SageMakerMixtralModel,
+)
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.config_utils import validate_config
 from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
+_WORLD_SIZE = 8
+_DEFAULT_TYPES = [
+    SageMakerCheckpointType.LOCAL,
+    SageMakerCheckpointType.SHARDED,
+    SageMakerCheckpointType.FULL,
+]
+
+
+@dataclass
+class SageMakerModel:
+    model_type: str = ""
+    model: Union[SageMakerLlamaModel, SageMakerMistralModel, SageMakerMixtralModel] = None
+    model_config_name: str = ""
+
+
+SAGEMAKER_TEST_MODEL_FACTORY = {
+    "llama": SageMakerModel(
+        model_type="llama",
+        model=SageMakerLlamaModel,
+        model_config_name="smp_llama_config",
+    ),
+    "llama_lora": SageMakerModel(
+        model_type="llama",
+        model=SageMakerLlamaModel,
+        model_config_name="smp_llama_config_lora",
+    ),
+    "mistral": SageMakerModel(
+        model_type="mistral",
+        model=SageMakerMistralModel,
+        model_config_name="hf_mistral_config",
+    ),
+    "mixtral": SageMakerModel(
+        model_type="mixtral",
+        model=SageMakerMixtralModel,
+        model_config_name="smp_mixtral_config",
+    ),
+}
 
 
 def skip_if_lt_x_gpu(x):
@@ -41,7 +84,7 @@ def skip_if_lt_x_gpu(x):
     return decorator
 
 
-@validate_config()
+@validate_config(extra="allow")
 def setup_test_cfg(cfg: DictConfig):
     """Set the update the cfg so that it can be used for testing in one node.
 
@@ -60,21 +103,31 @@ def setup_test_cfg(cfg: DictConfig):
     # trainer
     cfg.trainer.max_steps = 2
     cfg.trainer.num_nodes = 1
+    cfg.trainer.devices = 8
     cfg.trainer.limit_val_batches = 0
 
     # Model
     cfg.model.train_batch_size = 1
-    cfg.model.max_context_width = 256
-    cfg.model.max_position_embeddings = 256
+    cfg.model.max_context_width = 6
+    cfg.model.max_position_embeddings = 8
     cfg.model.num_layers = 2
-    cfg.model.hidden_width = 256
-    cfg.model.num_heads = 2
-    cfg.model.intermediate_size = 256
+    cfg.model.vocab_size = 32
+
+    if cfg.model.model_type != "mistral":
+        cfg.model.hidden_width = 256
+        cfg.model.num_heads = 2
+        cfg.model.intermediate_size = 256
+
+    cfg.model.shard_degree = _WORLD_SIZE
+    if cfg.model.model_type == "mixtral":
+        cfg.model.num_key_value_heads = 1
+    if cfg.use_smp:
+        cfg.model.tensor_model_parallel_degree = 1
+        cfg.model.expert_model_parallel_degree = 1
+    cfg.model.do_finetune = False
 
     # data
     cfg.model.data.use_synthetic_data = True
-
-    cfg.model.do_finetune = False
 
     return cfg
 
@@ -157,19 +210,20 @@ def create_temp_dir(func):
 
 class TestCheckpoint:
 
-    def config(self, config_name="smp_llama_config"):
-        with initialize(version_base="1.2", config_path="../../../../../examples/llama/conf"):
-            cfg = hydra.compose(config_name=config_name)
+    def config(self, model_type="llama"):
+        with initialize(version_base="1.2", config_path=f"../../../../../examples/{model_type}/conf"):
+            cfg = hydra.compose(config_name=SAGEMAKER_TEST_MODEL_FACTORY[model_type].model_config_name)
             logging.debug("\n\n************** Experiment configuration ***********")
             logging.debug(f"\n{OmegaConf.to_yaml(cfg)}")
             cfg.exp_manager.exp_dir = "tmp"
             return setup_test_cfg(cfg)
 
-    def create_and_fit(self, config, callbacks=None, sample=None):
+    def create_and_fit(self, config, model_type="llama", callbacks=None, sample=None):
         """Create a trainer, model and datamoudle then run fit."""
         trainer, data_module = SageMakerTrainerBuilder(config).create_trainer()
         exp_manager(trainer, config.exp_manager)
-        model_module = SageMakerLlamaModel(config.model, trainer, use_smp=config.use_smp)
+        sagemaker_model = SAGEMAKER_TEST_MODEL_FACTORY[model_type].model
+        model_module = sagemaker_model(config.model, trainer, use_smp=config.use_smp)
         if callbacks:
             if not isinstance(callbacks, list):
                 callbacks = [callbacks]
@@ -177,7 +231,7 @@ class TestCheckpoint:
         # train
         trainer.fit(model_module, datamodule=data_module)
 
-        # Run one manuual step.
+        # Run one manual step.
         outputs = {}
         if sample:
             outputs = self.run_step(trainer, model_module, sample)
@@ -262,7 +316,7 @@ class TestCheckpoint:
     @pytest.fixture
     def cuda_available(self):
         """Check if cuda is available."""
-        return torch.cuda.is_available() and torch.cuda.device_count() >= 8
+        return torch.cuda.is_available() and torch.cuda.device_count() >= _WORLD_SIZE
 
     def generate_sample(self, config):
         """Generate a random sample."""
@@ -334,9 +388,13 @@ class TestCheckpoint:
         config = self.config_for_setup(tmp_path)
         config.exp_manager.exp_dir = tmp_path
         config.trainer.max_steps = 0
+        # Setting warmup_steps to be nonzeros to avoid division zero erro.
+        config.model.optim.sched.warmup_steps = 1
 
         # Set up the process group in pytorch lightning, but no training happens.
-        self.create_and_fit(config)
+        trainer, data_module, model_module, _ = self.create_and_fit(config)
+        del trainer, data_module, model_module
+        torch.cuda.empty_cache()
 
         if dist.get_rank() == 0:
             temp_dir = tmp_path
@@ -356,4 +414,12 @@ class TestCheckpoint:
         yield temp_dir
         if dist.get_rank() == 0:
             shutil.rmtree(temp_dir, ignore_errors=True)
+        torch.cuda.empty_cache()
         dist.barrier()
+
+    def retrieve_state_dicts(self, trainer, checkpoint_types=_DEFAULT_TYPES):
+        state_dicts = []
+        for checkpoint_type in checkpoint_types:
+            trainer.strategy.checkpoint_io.checkpoint_type = checkpoint_type
+            state_dicts.append(trainer._checkpoint_connector.dump_checkpoint())
+        return state_dicts

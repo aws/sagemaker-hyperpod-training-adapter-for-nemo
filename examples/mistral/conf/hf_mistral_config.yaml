@@ -116,7 +116,7 @@ model:
   data:
     train_dir: ["/fsx/datasets/train_ids_wsvocab_redo_2048_smaller"]
     val_dir: ["/fsx/datasets/llama_new/val"]
-    dataset_type: gpt
+    dataset_type: hf
     use_synthetic_data: True
 
   # Nsys profiling options

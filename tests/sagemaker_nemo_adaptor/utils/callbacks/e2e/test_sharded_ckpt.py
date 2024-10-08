@@ -16,18 +16,23 @@ from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 class TestShardedCheckpoint(TestCheckpoint):
 
     @skip_if_lt_x_gpu(8)
-    def test_sharded_save_and_load(self, temp_dir):
+    @pytest.mark.parametrize(
+        "model_type",
+        [("llama"), ("mistral"), ("mixtral")],
+    )
+    def test_sharded_save_and_load(self, temp_dir, model_type):
         # Config set up
-        config = self.config()
+        config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.SHARDED)
 
         sample = self.generate_sample(config)
 
-        trainer, data_module, model_module, old_outputs = self.create_and_fit(config, sample=sample)
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.SHARDED
-        old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
+        trainer, data_module, model_module, old_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
+        old_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.SHARDED])[0]
 
         # Check saved checkpoint files.
         sharded_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "sharded")
@@ -53,9 +58,10 @@ class TestShardedCheckpoint(TestCheckpoint):
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module, new_outputs = self.create_and_fit(config, sample=sample)
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.SHARDED
-        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
+        trainer, data_module, model_module, new_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
+        new_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.SHARDED])[0]
 
         self.check_correctness(old_state_dict, new_state_dict, data_module.__class__.__qualname__)
         assert_state_dict_equal(old_outputs, new_outputs)

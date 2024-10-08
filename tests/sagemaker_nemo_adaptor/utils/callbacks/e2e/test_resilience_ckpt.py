@@ -121,27 +121,24 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
     @skip_if_lt_x_gpu(8)
     @pytest.mark.parametrize(
-        # Make sure we only save/load with resilicence checkpoint, and the other types of state_dict
-        # are still equal.
-        "checkpoint_type",
-        [
-            SageMakerCheckpointType.SHARDED,
-            SageMakerCheckpointType.LOCAL,
-            SageMakerCheckpointType.FULL,
-        ],
+        "model_type",
+        [("llama"), ("mistral"), ("mixtral")],
     )
-    def test_resilience_save_and_load(self, checkpoint_type, temp_dir):
+    def test_resilience_save_and_load(self, model_type, temp_dir):
         # Config set up
-        config = self.config()
+        config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
 
         sample = self.generate_sample(config)
 
-        trainer, data_module, model_module, old_outputs = self.create_and_fit(config, sample=sample)
-        trainer.strategy.checkpoint_io.checkpoint_type = checkpoint_type
-        old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
+        trainer, data_module, model_module, old_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
+        # Make sure we only save/load with resilicence checkpoint, and the other types of state_dict
+        # are still equal.
+        old_state_dicts = self.retrieve_state_dicts(trainer)
 
         # Check saved checkpoint files.
         assert os.path.exists(os.path.join(config.exp_manager.checkpoint_dir, "local"))
@@ -157,11 +154,13 @@ class TestResilienceCheckpoint(TestCheckpoint):
         # Create a new trainer and load the checkpoint
         # No checkpoint path needs to be set during loading, as it should auto resume.
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module, new_outputs = self.create_and_fit(config, sample=sample)
-        trainer.strategy.checkpoint_io.checkpoint_type = checkpoint_type
-        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
+        trainer, data_module, model_module, new_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
+        new_state_dicts = self.retrieve_state_dicts(trainer)
 
-        self.check_correctness(old_state_dict, new_state_dict, data_module.__class__.__qualname__)
+        for old_state_dict, new_state_dicts in zip(old_state_dicts, new_state_dicts):
+            self.check_correctness(old_state_dict, new_state_dicts, data_module.__class__.__qualname__)
         assert_state_dict_equal(old_outputs, new_outputs)
         dist.barrier()
 
@@ -203,7 +202,6 @@ class TestResilienceCheckpoint(TestCheckpoint):
         resilience_callback = trainer.checkpoint_callback
         resilience_interval_new = resilience_callback._every_n_train_steps
         resilience_callback_state_dict_new = resilience_callback.state_dict()
-        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
 
         # Check resilience_callback_state_dict and intervals are the same.
         assert_values(resilience_interval_old, resilience_interval_new)
@@ -222,8 +220,6 @@ class TestResilienceCheckpoint(TestCheckpoint):
         # Insert the ResilienceStateDictRetriever callback.
         state_dict_retriever = ResilienceStateDictRetriever(retrieve_step=1)
         trainer, data_module, model_module, _ = self.create_and_fit(config, state_dict_retriever)
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.LOCAL
-        old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
 
         # Two steps are run. Then we remove one of the directory.
         if dist.get_rank() == 0:
@@ -239,8 +235,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
         # set the max_steps to be 1 here so that it won't continue training after loading the checkpoint.
         config.trainer.max_steps = 1
         trainer, data_module, _, _ = self.create_and_fit(config)
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.LOCAL
-        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
+        new_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.LOCAL])[0]
 
         # Check resilience_callback_state_dict and intervals are the same.
         self.check_correctness(

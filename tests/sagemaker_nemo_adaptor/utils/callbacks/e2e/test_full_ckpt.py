@@ -16,18 +16,23 @@ from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 class TestFullCheckpoint(TestCheckpoint):
 
     @skip_if_lt_x_gpu(8)
-    def test_full_save_and_load(self, temp_dir):
+    @pytest.mark.parametrize(
+        "model_type",
+        [("llama"), ("mistral"), ("mixtral")],
+    )
+    def test_full_save_and_load(self, temp_dir, model_type):
         # Config set up
-        config = self.config()
+        config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.FULL)
 
         sample = self.generate_sample(config)
 
-        trainer, data_module, model_module, old_outputs = self.create_and_fit(config, sample=sample)
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
-        old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
+        trainer, data_module, model_module, old_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
+        old_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.FULL])[0]
 
         full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "full")
         assert os.path.exists(full_checkpoint_dir)
@@ -56,11 +61,14 @@ class TestFullCheckpoint(TestCheckpoint):
         config.model.hf_model_name_or_path = lastest_checkpoint.path
         config.model.do_finetune = True
         config.trainer.max_steps = 0
+        config.model.optim.sched.warmup_steps = 1
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module, new_outputs = self.create_and_fit(config, sample=sample)
+        trainer, data_module, model_module, new_outputs = self.create_and_fit(
+            config, model_type=model_type, sample=sample
+        )
 
-        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
-        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
+        new_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.FULL])[0]
+
         self.check_correctness(old_state_dict, new_state_dict, data_module_key="", is_full=True)
 
         assert_state_dict_equal(old_outputs, new_outputs)

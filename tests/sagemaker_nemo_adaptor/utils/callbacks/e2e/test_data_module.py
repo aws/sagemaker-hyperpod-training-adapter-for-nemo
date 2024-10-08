@@ -74,7 +74,7 @@ class TestDataModule(TestCheckpoint):
         config.trainer.max_steps = 7
 
         if checkpoint_type == SageMakerCheckpointType.SHARDED:
-            # Train 6 steps but only save checkpoint @ 5.
+            # Train 7 steps but only save checkpoint @ 5.
             # The last step data will be retrieved and compared.
             config.exp_manager.checkpoint_callback_params.save_top_k = 10
             config.exp_manager.checkpoint_callback_params.save_last = False
