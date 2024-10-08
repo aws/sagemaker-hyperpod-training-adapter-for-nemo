@@ -1,9 +1,6 @@
-name: Python Unit Test CI
+name: Python Unit Test CI After Commit
 
 on:
-  pull_request:
-    branches:
-      - main # Change to the branch we want to target for PRs
   push:
     branches:
       - main # Triggers on direct pushes to the main branch
