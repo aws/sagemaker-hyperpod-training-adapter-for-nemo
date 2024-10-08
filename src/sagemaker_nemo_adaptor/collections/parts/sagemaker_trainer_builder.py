@@ -41,6 +41,12 @@ def _disable_flash_attn_info_log():
     logger.setLevel(logging.WARNING)
 
 
+def _disable_aiobotocore_credential_log():
+    from aiobotocore.credentials import logger
+
+    logger.setLevel(logging.WARNING)
+
+
 class SageMakerTrainerBuilder:
     """
     Builder type to hide complex configuration of PTL Trainers for SMP/HF models.
@@ -50,6 +56,7 @@ class SageMakerTrainerBuilder:
     def __init__(self, cfg: DictConfig) -> None:
         self.cfg = cfg
         _disable_flash_attn_info_log()
+        _disable_aiobotocore_credential_log()
 
     def _training_strategy(self) -> Union[SageMakerDDPStrategy, SageMakerFSDPStrategy]:
         """
