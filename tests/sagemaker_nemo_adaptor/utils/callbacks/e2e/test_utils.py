@@ -173,45 +173,11 @@ def assert_values(value_1, value_2, key=None):
             assert assert_state_dict_equal(value_1[i], value_2[i]), f"Key {key}'s list does not match"
 
 
-def create_temp_dir(func):
-    def wrapper(*args, **kwargs):
-        # Get the unique directory name for the test
-        test_name = func.__name__
-        temp_dir = os.path.join("/tmp", test_name)
-
-        # remove dir if leftover from previous tests
-        if os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            except FileNotFoundError:
-                pass
-
-        # Create the temporary directory
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir, exist_ok=True)
-
-        # Pass the temporary directory path to the test function
-        kwargs["temp_dir"] = temp_dir
-
-        try:
-            # Run the test function
-            result = func(*args, **kwargs)
-        finally:
-            if not dist.is_initialized():
-                return
-            # Clean up the temporary directory
-            if dist.get_rank() == 0:
-                shutil.rmtree(temp_dir)
-
-        return result
-
-    return wrapper
-
-
 class TestCheckpoint:
 
     def config(self, model_type="llama"):
-        with initialize(version_base="1.2", config_path=f"../../../../../examples/{model_type}/conf"):
+        model_base_type = SAGEMAKER_TEST_MODEL_FACTORY[model_type].model_type
+        with initialize(version_base="1.2", config_path=f"../../../../../examples/{model_base_type}/conf"):
             cfg = hydra.compose(config_name=SAGEMAKER_TEST_MODEL_FACTORY[model_type].model_config_name)
             logging.debug("\n\n************** Experiment configuration ***********")
             logging.debug(f"\n{OmegaConf.to_yaml(cfg)}")

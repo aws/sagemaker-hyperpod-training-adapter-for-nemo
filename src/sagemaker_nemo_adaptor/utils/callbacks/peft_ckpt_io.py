@@ -45,7 +45,7 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
     def teardown(self):
         pass
 
-    def _merge_and_upload_peft_model(self, trainer: "pl.Trainer", checkpoint_dir: str):
+    def _merge_and_upload_peft_model(self, trainer: "pl.Trainer", checkpoint_dir: str, upload_to_storage=True):
         """Merge adapter weights with base model and upload final model"""
         hf_model_name_or_path = trainer.strategy.cfg.model.get("hf_model_name_or_path", None)
         if hf_model_name_or_path is None:
@@ -78,9 +78,13 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
 
         merged_model = peft_model.merge_and_unload()
         logging.debug(f"Model after merging: {merged_model}")
-        logging.info(f"Checkpointing to {final_model_dir}......")
-        merged_model.save_pretrained(final_model_dir)
-        logging.info("Successfully save the merged model checkpoint.")
+
+        if upload_to_storage:
+            logging.info(f"Checkpointing to {final_model_dir}......")
+            merged_model.save_pretrained(final_model_dir)
+            logging.info("Successfully save the merged model checkpoint.")
+
+        return merged_model
 
 
 class SageMakerPeftShardedCheckpointIO(SageMakerShardedCheckpointIO):

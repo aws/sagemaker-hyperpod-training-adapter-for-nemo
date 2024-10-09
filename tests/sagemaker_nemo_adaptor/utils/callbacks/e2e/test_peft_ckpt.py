@@ -4,8 +4,7 @@ import pytest
 import torch
 import torch.distributed as dist
 from nemo.utils import logging
-from test_utils import TestCheckpoint, assert_state_dict_equal, create_temp_dir
-from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
+from test_utils import TestCheckpoint, assert_state_dict_equal, skip_if_lt_x_gpu
 
 from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
@@ -55,13 +54,13 @@ class TestPeftCheckpoint(TestCheckpoint):
         Helper method to save full checkpoint to be used as the base model for PEFT
         """
         # Config set up
-        config = self.config(model_type="llama_lora")
+        config = self.config(model_type="llama")
         config.trainer.max_steps = 1
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.turn_on_full_only(config)
 
-        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
+        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama")
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
 
         full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "full")
@@ -76,27 +75,20 @@ class TestPeftCheckpoint(TestCheckpoint):
         return latest_checkpoint.path
 
 
-@skip_if_lt_x_gpu(8)
 class TestPeftShardedCheckpoint(TestPeftCheckpoint):
 
-    @create_temp_dir
-    def test_lora_sharded_save_and_load(self, temp_dir):
-        config = self.config(model_type="llama_lora")
-        self.run_peft_sharded_save_and_load(temp_dir, config)
-
-    @create_temp_dir
-    def test_qlora_sharded_save_and_load(self, temp_dir):
-        config = self.config(
-            model_type="llama_lora",
-        )
-        config.model.peft.peft_type = "qlora_4bit"
-        self.run_peft_sharded_save_and_load(temp_dir, config)
-
-    def run_peft_sharded_save_and_load(self, temp_dir, config):
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "peft_type",
+        [("lora"), ("qlora_4bit")],
+    )
+    def test_peft_sharded_save_and_load(self, temp_dir, peft_type):
         # Save full checkpoint to be used as the base model for PEFT
         pretrained_path = self.run_full_save(temp_dir)
-        config.model.hf_model_name_or_path = pretrained_path
         # Config set up
+        config = self.config(model_type="llama_lora")
+        config.model.hf_model_name_or_path = pretrained_path
+        config.model.peft.peft_type = peft_type
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.turn_on_sharded_only(config)
@@ -104,7 +96,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         # Turn on fine tuning
         config.model.do_finetune = True
 
-        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama")
+        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_SHARDED
         old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
         old_model_weights = trainer.strategy.sharded_model_state_dict
@@ -134,7 +126,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
-        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama")
+        trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_SHARDED
         new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
         new_model_weights = trainer.strategy.sharded_model_state_dict
@@ -147,26 +139,21 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         dist.barrier()
 
 
-@skip_if_lt_x_gpu(8)
 class TestPeftFullCheckpoint(TestPeftCheckpoint):
 
-    @create_temp_dir
-    def test_lora_full_save_and_load(self, temp_dir):
-        config = self.config(model_type="llama_lora")
-        self.run_peft_full_save_and_load(temp_dir, config)
-
-    @create_temp_dir
-    def test_qlora_full_save_and_load(self, temp_dir):
-        config = self.config(model_type="llama_lora")
-        config.model.peft.peft_type = "qlora_4bit"
-        self.run_peft_full_save_and_load(temp_dir, config)
-
-    def run_peft_full_save_and_load(self, temp_dir, config):
+    @skip_if_lt_x_gpu(8)
+    @pytest.mark.parametrize(
+        "peft_type",
+        [("lora"), ("qlora_4bit")],
+    )
+    def test_peft_full_save_and_load(self, temp_dir, peft_type):
         # Save full checkpoint to be used as the base model for PEFT
         pretrained_path = self.run_full_save(temp_dir)
-        config.model.hf_model_name_or_path = pretrained_path
 
         # Config set up
+        config = self.config(model_type="llama_lora")
+        config.model.hf_model_name_or_path = pretrained_path
+        config.model.peft.peft_type = peft_type
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.turn_on_full_only(config)
@@ -187,8 +174,8 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
         all_saved_full_checkpoints = list(os.scandir(full_checkpoint_dir))
         assert len(all_saved_full_checkpoints) == num_checkpoints_save
 
-        lastest_checkpoint = all_saved_full_checkpoints[-1]
-        all_files = list(os.scandir(lastest_checkpoint))
+        latest_checkpoint = all_saved_full_checkpoints[-1]
+        all_files = list(os.scandir(latest_checkpoint))
         # There should only be 3 files for the adapter weights + one final-model dir in one peft_full checkpoint dir.
         # adapter_config.json, adapter_model.safetensors, final-model, README.md
         assert len(all_files) == 4
@@ -198,21 +185,42 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
 
         # Check files in the final-model dir
         # There should be a config.json, generation_config.json, and at least 1 .safetensors file
-        final_model_dir = os.path.join(lastest_checkpoint, "final-model")
+        final_model_dir = os.path.join(latest_checkpoint, "final-model")
         all_final_model_files = list(os.scandir(final_model_dir))
         assert "config.json" in [v.name for v in all_final_model_files]
         assert "generation_config.json" in [v.name for v in all_final_model_files]
         assert any(".safetensors" in v.name for v in all_final_model_files)
 
+        # Save the fully merged model state_dict for comparison
+        if dist.get_rank() == 0:
+            old_merged_model = trainer.strategy.checkpoint_io._checkpoint_io[
+                SageMakerCheckpointType.PEFT_FULL
+            ]._merge_and_upload_peft_model(trainer, latest_checkpoint, upload_to_storage=False)
+            old_state_dict = old_merged_model.state_dict()
+        else:
+            # full state_dict only gets loaded onto rank 0
+            old_state_dict = {}
+
         del trainer, data_module, model_module
 
-        # Create a new trainer and load the checkpoint
+        # Create a new trainer and load the full checkpoint
+        # Set up non peft config to load in the full checkpoint
+        config.model.peft.peft_type = None
         # A save full checkpoint can be only loaded through config.model.hf_model_name_or_path
         config.model.hf_model_name_or_path = final_model_dir
         config.model.do_finetune = True
+        config.trainer.max_steps = 0
+        config.model.optim.sched.warmup_steps = 1
+        # disable final checkpoint
+        config.exp_manager.export_full_model.save_last = False
         logging.info("Creating a new trainer and loading the checkpoint")
         trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
-        # TODO: figure out how to check correctness of the fully merged model after loading
+
+        trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.FULL
+        new_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=True)
+        new_state_dict = new_state_dict["state_dict"]
+
+        assert_state_dict_equal(new_state_dict, old_state_dict)
 
         del trainer, data_module, model_module
         dist.barrier()
