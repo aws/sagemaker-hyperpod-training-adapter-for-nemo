@@ -109,6 +109,7 @@ class TestShardedCheckpoint(TestCheckpoint):
             (7, True, 2),
             (7, False, 2),
             (6, True, 3),
+            (2, False, 0),
         ],
     )
     @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
@@ -123,8 +124,11 @@ class TestShardedCheckpoint(TestCheckpoint):
         config.exp_manager.checkpoint_callback_params.save_last = sharded_save_last
         config.exp_manager.checkpoint_callback_params.every_n_train_steps = every_n_train_steps
 
-        expected_call_counts = int(config.trainer.max_steps / every_n_train_steps)
-        if max_steps % every_n_train_steps != 0 and sharded_save_last:
-            expected_call_counts += 1
+        if every_n_train_steps != 0:
+            expected_call_counts = int(config.trainer.max_steps / every_n_train_steps)
+            if max_steps % every_n_train_steps != 0 and sharded_save_last:
+                expected_call_counts += 1
+        else:
+            expected_call_counts = 0
         self.create_and_fit(config)
         assert mock_save.call_count == expected_call_counts

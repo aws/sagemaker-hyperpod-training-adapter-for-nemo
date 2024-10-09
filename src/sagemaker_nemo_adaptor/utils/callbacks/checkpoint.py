@@ -365,10 +365,10 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         3. The new score is better.
         """
         save_last_step = trainer.max_steps == trainer.global_step and self._save_last_sharded
-        is_sharded_on = self._save_sharded_every_n_steps and self._save_top_k >= 1
-        is_every_n = trainer.global_step % self._save_sharded_every_n_steps == 0
+        is_sharded_on = self._save_sharded_every_n_steps >= 1 and self._save_top_k >= 1
+        is_every_n = is_sharded_on and (trainer.global_step % self._save_sharded_every_n_steps == 0)
         # Neither saving last step nor every n step is needed.
-        if not save_last_step and not (is_sharded_on and is_every_n):
+        if not save_last_step and not is_every_n:
             return False
         has_value = self._monitor in monitor_candidates
         if not has_value:
