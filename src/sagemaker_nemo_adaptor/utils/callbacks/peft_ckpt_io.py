@@ -72,7 +72,7 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
             patch_llama_flash_attn_cp.apply_patch()
         logging.debug(f"Base model: {base_model}")
 
-        peft_model = PeftModel.from_pretrained(base_model, checkpoint_dir)
+        peft_model = PeftModel.from_pretrained(base_model, checkpoint_dir, torch_device="cpu")
         logging.debug(f"Peft model after loading weights: {peft_model}")
         logging.info("Merging the adapter, this might take a while......")
 
