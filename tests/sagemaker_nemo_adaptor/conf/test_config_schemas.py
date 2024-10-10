@@ -239,7 +239,7 @@ class Test_BaseModelConfig:
 
     def test_outside_of_range(self):
         invalid_val = -1
-        config = self.build_config(hidden_width=invalid_val)
+        config = self.build_config(hidden_size=invalid_val)
 
         with pytest.raises(ValidationError):
             BaseModelConfig.model_validate(config)
@@ -280,7 +280,7 @@ class Test_BaseModelConfig:
         return {
             "do_finetune": False,
             "model_type": ModelType.LLAMA_V3.value,
-            "hidden_width": 4096,
+            "hidden_size": 4096,
             "max_content_width": 4096,
             "max_position_embeddings": 2048,
             "optim": BaseModelOptimizerConfig().model_dump(),

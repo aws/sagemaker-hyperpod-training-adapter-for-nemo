@@ -1,8 +1,10 @@
 import transformers
+from omegaconf import OmegaConf
 from packaging import version as pversion
 from transformers import LlamaConfig
 
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
+from sagemaker_nemo_adaptor.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
@@ -15,6 +17,17 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
     """
 
     predefined_model = True
+
+    def set_config_mapping_hf_to_recipe_aliases(self):
+        config_map = CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
+        if OmegaConf.select(self._cfg, "rope_scaling.rope_type") == "llama3":
+            if pversion.parse(transformers.__version__) < pversion.parse("4.44.2"):
+                _logger.warning(
+                    f"Rope scaling type 'llama3' is only supported for transformers >= 4.44.2, the current version is {pversion.parse(transformers.__version__)}"
+                )
+            else:
+                config_map["rope_scaling"] = ["rope_scaling"]
+        self._config_mapping_hf_to_recipe_aliases = config_map
 
     def get_model_config(self):
         """
@@ -49,6 +62,5 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
                 use_cache=False,
                 pretraining_tp=1,
                 tie_word_embeddings=False,
-                rope_scaling=rope_scaling,
             )
         return model_config

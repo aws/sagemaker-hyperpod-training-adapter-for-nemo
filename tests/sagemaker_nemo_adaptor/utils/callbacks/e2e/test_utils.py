@@ -110,11 +110,11 @@ def setup_test_cfg(cfg: DictConfig):
     cfg.model.train_batch_size = 1
     cfg.model.max_context_width = 6
     cfg.model.max_position_embeddings = 8
-    cfg.model.num_layers = 2
+    cfg.model.num_hidden_layers = 2
     cfg.model.vocab_size = 32
 
     if cfg.model.model_type != "mistral":
-        cfg.model.hidden_width = 256
+        cfg.model.hidden_size = 256
         cfg.model.num_heads = 2
         cfg.model.intermediate_size = 256
 

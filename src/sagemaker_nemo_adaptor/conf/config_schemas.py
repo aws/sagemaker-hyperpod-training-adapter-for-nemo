@@ -126,6 +126,15 @@ class BaseModelOptimizerConfig(BaseModel):
     sched: BaseModelOptimizerScheduler = Field(default_factory=BaseModelOptimizerScheduler)
 
 
+class BaseRopeScalingConfig(BaseModel):
+    # rope scaling
+    rope_type: Literal["llama3", None] = None
+    factor: float = Field(default=8.0)
+    high_freq_factor: float = Field(default=4.0)
+    low_freq_factor: float = Field(default=1.0)
+    original_max_position_embeddings: int = Field(default=8192)
+
+
 class BaseModelDataConfig(BaseModel):
     train_dir: Optional[Union[str, list[str]]] = None
     val_dir: Optional[Union[str, list[str]]] = None
@@ -193,25 +202,17 @@ class BaseModelConfig(BaseModel):
     # Model Architecture
     max_context_width: int = Field(default=2048, ge=1)  # max_context_width is always required for data purposes
     max_position_embeddings: int | None = Field(default=None, ge=1)
-    num_layers: int | None = Field(default=None, ge=1)
-    hidden_width: int | None = Field(default=None, ge=1)
-    num_heads: int | None = Field(default=None, ge=1)
+    num_hidden_layers: int | None = Field(default=None, ge=1)
+    hidden_size: int | None = Field(default=None, ge=1)
+    num_attention_heads: int | None = Field(default=None, ge=1)
     intermediate_size: int | None = Field(default=None, ge=1)
     initializer_range: float | None = Field(default=None, ge=0)
-    pad_token_id: int | None = None
     layernorm_epsilon: float | None = Field(default=None, ge=0)
     vocab_size: int | None = Field(default=None, ge=1)
     num_key_value_heads: int | None = Field(default=None, ge=1)
     use_flash_attention: bool | None = None
 
     rope_theta: float = Field(default=10000.0)
-
-    # rope scaling
-    rope_scaling_type: Literal["llama3", None] = None
-    rope_scaling_factor: float = Field(default=8.0)
-    rope_scaling_high_freq_factor: float = Field(default=4.0)
-    rope_scaling_low_freq_factor: float = Field(default=1.0)
-    rope_scaling_original_max_position_embeddings: int = Field(default=8192)
 
     # fp8
     fp8: bool = True
@@ -235,6 +236,7 @@ class BaseModelConfig(BaseModel):
     data: BaseModelDataConfig = Field(default_factory=lambda: BaseModelDataConfig(use_synthetic_data=True))
     nsys_profile: BaseModelNsysProfileConfig = Field(default_factory=BaseModelNsysProfileConfig)
     peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
+    rope_scaling: BaseRopeScalingConfig = Field(default_factory=BaseRopeScalingConfig)
 
     @model_validator(mode="before")
     def before_model_validations(cls, data: Any) -> Any:
@@ -250,8 +252,8 @@ class BaseModelConfig(BaseModel):
         if getattr(self, "max_context_width", None) is not None and not is_power_of_two(self.max_context_width):
             _logger.warning(msg_fn("max_context_width", self.max_context_width))
 
-        if getattr(self, "hidden_width", None) is not None and not is_power_of_two(self.hidden_width):
-            _logger.warning(msg_fn("hidden_width", self.hidden_width))
+        if getattr(self, "hidden_size", None) is not None and not is_power_of_two(self.hidden_size):
+            _logger.warning(msg_fn("hidden_size", self.hidden_size))
 
         if getattr(self, "num_heads", None) is not None and not is_power_of_two(self.num_heads):
             _logger.warning(msg_fn("num_heads", self.num_heads))

@@ -22,6 +22,7 @@ from torch.sagemaker.utils.process_group_utils import get_global_ranks
 from transformer_engine.common.recipe import DelayedScaling, Format
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
+from sagemaker_nemo_adaptor.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
 from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
@@ -39,27 +40,6 @@ class SageMakerNLPBaseModel(ModelPT):
     User will need to either consume the provided inheritors or inherit and implement their own model class.
     """
 
-    # A mapping from our recipe configs to the hf model config
-    # TODO: Revisit naming strategy and probably move this map to recipe checking
-    _config_mapping_recipe_to_hf = {
-        "vocab_size": "vocab_size",
-        "hidden_width": "hidden_size",
-        "intermediate_size": "intermediate_size",
-        "num_layers": "num_hidden_layers",
-        "num_heads": "num_attention_heads",
-        "max_context_width": "max_position_embeddings",
-        "initializer_range": "initializer_range",
-        "num_key_value_heads": "num_key_value_heads",
-        "layernorm_epsilon": "rms_norm_eps",
-        "rotary_pct": "rotary_pct",
-        "rotary_emb_base": "rotary_emb_base",
-        "mistral_sliding_window": "sliding_window",
-        "rope_theta": "rope_theta",
-        "mixtral_sliding_window": "sliding_window",
-        "num_experts_per_tok": "num_experts_per_tok",
-        "num_local_experts": "num_local_experts",
-        "delayed_param": "delayed_param",
-    }
     # Whether if the model is predefined
     # All subclass should set this to True
     predefined_model = False
@@ -73,6 +53,9 @@ class SageMakerNLPBaseModel(ModelPT):
 
         self.val_loss = 0
 
+        self._config_mapping_hf_to_recipe_aliases = None
+
+        self.set_config_mapping_hf_to_recipe_aliases()
         # Setup Transformer Engine Variable TODO: move it inside smp library
         os.environ["NVTE_TORCH_COMPILE"] = "0"
         os.environ["TORCH_COMPILE_DISABLE"] = "1"
@@ -88,15 +71,26 @@ class SageMakerNLPBaseModel(ModelPT):
         cls = type(self).__name__
         raise NotImplementedError(f"{cls}.get_model_config not implemented")
 
+    def set_config_mapping_hf_to_recipe_aliases(self):
+        # Map the hf args with recipe aliases, could be nemo/hf style
+        self._config_mapping_hf_to_recipe_aliases = CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
+
     def _get_model_configurable_dict(self):
         """
         Get the a dict that contains all configurable values of the current model
         This method will only be used for child class
         """
         config_dict = {}
-        for recipe_cfg, hf_config in self._config_mapping_recipe_to_hf.items():
-            if self._cfg.get(recipe_cfg, None) is not None:
-                config_dict[hf_config] = self._cfg.get(recipe_cfg)
+
+        for hf_config, recipe_configs in self._config_mapping_hf_to_recipe_aliases.items():
+            for recipe_alias in recipe_configs:
+                if self._cfg.get(recipe_alias, None) is not None:
+                    if type(self._cfg.get(recipe_alias)).__name__ == "DictConfig":
+                        # Check nested config, like rope_scaling
+                        config_dict[hf_config] = dict(self._cfg.get(recipe_alias))
+                    else:
+                        config_dict[hf_config] = self._cfg.get(recipe_alias)
+
         if dist.get_rank() == 0:
             _logger.info(f"Overriding model config with {config_dict}")
         return config_dict
