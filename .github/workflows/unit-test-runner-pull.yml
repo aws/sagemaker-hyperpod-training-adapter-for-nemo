@@ -5,6 +5,10 @@ on:
     branches:
       - main # Change to the branch we want to target for PRs
 
+permissions:
+   id-token: write # This is required for requesting the JWT
+   contents: read # This is required for actions/checkout
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,11 +17,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up AWS CLI
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.RUNNER_ROLE_ARN }}
+          role-session-name: unit-test-runner-pull-session
           aws-region: us-west-2
 
       - name: Login to Amazon ECR

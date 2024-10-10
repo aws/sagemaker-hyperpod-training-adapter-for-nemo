@@ -5,6 +5,10 @@ on:
     branches:
       - main # Triggers on direct pushes to the main branch
 
+permissions:
+   id-token: write # This is required for requesting the JWT
+   contents: read # This is required for actions/checkout
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,11 +27,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pre-commit
 
-      - name: Set up AWS CLI
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.RUNNER_ROLE_ARN }}
+          role-session-name: precommit-check-push-session
           aws-region: us-west-2
 
       - name: Run pre-commit checks
