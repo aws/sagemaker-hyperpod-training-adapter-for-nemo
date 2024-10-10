@@ -127,6 +127,10 @@ model:
     ranks: [ 0 ] # Global rank IDs to profile
     gen_shape: False # Generate model and kernel details including input shapes
 
+  # Viztracer
+  viztracer:
+    enabled: False
+
   # PEFT
   peft:
     peft_type: null # lora

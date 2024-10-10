@@ -1,9 +1,10 @@
 import logging
+import os
 import sys
 from typing import Union
 
 from nemo.lightning.pytorch.callbacks import NsysCallback
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
 
 from sagemaker_nemo_adaptor.collections.data import (
@@ -26,6 +27,13 @@ try:
     SUPPORT_CHECKPOINT = True
 except ImportError:
     SUPPORT_CHECKPOINT = False
+
+try:
+    from sagemaker_nemo_adaptor.utils.callbacks.tracer import VizTracerCallback
+
+    SUPPORT_VIZTRACER = True
+except ImportError:
+    SUPPORT_VIZTRACER = False
 
 
 def _disable_flash_attn_info_log():
@@ -144,6 +152,26 @@ class SageMakerTrainerBuilder:
             )
         ]
 
+    def _create_viztracer_callbacks(self):
+        if not SUPPORT_VIZTRACER:
+            return []
+
+        viztracer = self.cfg.model.get("viztracer", None)
+        if not viztracer:
+            return []
+
+        enabled = viztracer.get("enabled", False)
+        if not enabled:
+            return []
+
+        init_kwargs = OmegaConf.to_container(viztracer, resolve=True)
+        init_kwargs.pop("enabled", None)
+        if not init_kwargs.get("output_file", None):
+            path = os.path.join(self.cfg.exp_manager.exp_dir, "result.json")
+            init_kwargs["output_file"] = path
+
+        return [VizTracerCallback(**init_kwargs)]
+
     def _create_plugins(self) -> list:
         plugins = []
 
@@ -156,6 +184,7 @@ class SageMakerTrainerBuilder:
         assert callbacks is None or isinstance(callbacks, list)
         callbacks = callbacks if callbacks else []
         callbacks += self._create_nsys_callbacks()
+        callbacks += self._create_viztracer_callbacks()
         callbacks += self._create_checkpoint_callbacks()
         return callbacks
 

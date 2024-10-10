@@ -1,5 +1,5 @@
 import os
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Sequence, Union
 
 from pydantic import (
     BaseModel,
@@ -158,6 +158,33 @@ class BaseModelNsysProfileConfig(BaseModel):
     gen_shape: bool = False
 
 
+# default values are from https://github.com/gaogaotiantian/viztracer/blob/master/src/viztracer/viztracer.py#L22
+class BaseVizTracerConfig(BaseModel):
+    enabled: bool = False
+    ranks: list = [0]
+    tracer_entries: int = 1000000
+    verbose: int = 1
+    max_stack_depth: int = -1
+    ignore_c_function: bool = False
+    ignore_frozen: bool = False
+    log_func_retval: bool = False
+    log_func_args: bool = False
+    log_print: bool = False
+    log_gc: bool = False
+    log_sparse: bool = False
+    log_async: bool = False
+    log_audit: Optional[Sequence[str]] = None
+    pid_suffix: bool = False
+    file_info: bool = True
+    register_global: bool = True
+    trace_self: bool = False
+    min_duration: float = 0
+    minimize_memory: bool = False
+    dump_raw: bool = False
+    sanitize_function_name: bool = False
+    output_file: Optional[str] = None
+
+
 class BaseModelPeftConfig(BaseModel):
     peft_type: Optional[Literal["lora", "qlora_4bit"]] = None
     rank: int = Field(default=32, ge=1)
@@ -235,6 +262,7 @@ class BaseModelConfig(BaseModel):
     optim: BaseModelOptimizerConfig = Field(default_factory=BaseModelOptimizerConfig)
     data: BaseModelDataConfig = Field(default_factory=lambda: BaseModelDataConfig(use_synthetic_data=True))
     nsys_profile: BaseModelNsysProfileConfig = Field(default_factory=BaseModelNsysProfileConfig)
+    viztracer: BaseVizTracerConfig = Field(default_factory=BaseVizTracerConfig)
     peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
     rope_scaling: BaseRopeScalingConfig = Field(default_factory=BaseRopeScalingConfig)
 
