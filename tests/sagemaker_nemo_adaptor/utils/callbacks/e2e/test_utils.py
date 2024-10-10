@@ -108,19 +108,20 @@ def setup_test_cfg(cfg: DictConfig):
 
     # Model
     cfg.model.train_batch_size = 1
-    cfg.model.max_context_width = 6
+    cfg.model.max_context_width = 8
     cfg.model.max_position_embeddings = 8
     cfg.model.num_hidden_layers = 2
     cfg.model.vocab_size = 32
 
     if cfg.model.model_type != "mistral":
-        cfg.model.hidden_size = 256
+        cfg.model.hidden_width = 8
         cfg.model.num_heads = 2
-        cfg.model.intermediate_size = 256
+        cfg.model.intermediate_size = 8
 
     cfg.model.shard_degree = _WORLD_SIZE
     if cfg.model.model_type == "mixtral":
         cfg.model.num_key_value_heads = 1
+
     if cfg.use_smp:
         cfg.model.tensor_model_parallel_degree = 1
         cfg.model.expert_model_parallel_degree = 1
@@ -378,6 +379,8 @@ class TestCheckpoint:
         logging._logger.disabled = False
 
         yield temp_dir
+        if not dist.is_initialized():
+            return
         if dist.get_rank() == 0:
             shutil.rmtree(temp_dir, ignore_errors=True)
         torch.cuda.empty_cache()

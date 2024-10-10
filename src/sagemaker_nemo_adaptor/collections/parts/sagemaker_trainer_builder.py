@@ -215,6 +215,7 @@ class SageMakerTrainerBuilder:
                 else self.cfg.trainer.val_check_interval
             ),
             limit_val_batches=self.cfg.trainer.limit_val_batches,
+            devices=self.cfg.trainer.get("devices", "auto"),
         )
 
         data_module = self._create_data_module(trainer)

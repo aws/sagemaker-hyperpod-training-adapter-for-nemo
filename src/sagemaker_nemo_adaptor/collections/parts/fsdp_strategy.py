@@ -331,7 +331,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         typ = self.checkpoint_io.checkpoint_type
         if typ == SageMakerCheckpointType.LOCAL:
             return self.local_optimizer_state_dict(optimizer)
-        if typ == SageMakerCheckpointType.SHARDED or SageMakerCheckpointType.PEFT_SHARDED:
+        if typ == SageMakerCheckpointType.SHARDED or typ == SageMakerCheckpointType.PEFT_SHARDED:
             return self.sharded_optimizer_state_dict(optimizer)
         if typ == SageMakerCheckpointType.FULL:
             return self.full_optimizer_state_dict(optimizer)
@@ -378,6 +378,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 model_state_dict=checkpoint_state_dict,
                 optimizer_key=optimizer_key,
                 storage_reader=DistributedFileSystemReader(path),
+                process_group=self.pytorch_model.process_group,
             )
             flattened_osd = FSDP.optim_state_dict_to_load(
                 model=self.pytorch_model, optim=optimizer, optim_state_dict=state_dict[optimizer_key]

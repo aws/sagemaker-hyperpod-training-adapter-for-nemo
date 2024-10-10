@@ -93,10 +93,11 @@ class ResilienceIntervalRetriever(Callback):
         return int(max(interval, 1))
 
 
-class ResilienceStateDictRetriever(Callback):
+class StateDictRetriever(Callback):
     """Retrieve the state_dict from the given step."""
 
-    def __init__(self, retrieve_step):
+    def __init__(self, retrieve_step, checkpoint_type=SageMakerCheckpointType.LOCAL):
+        self._checkpoint_type = checkpoint_type
         self.retrieve_step = retrieve_step
         self._retrieve_state_dict = None
 
@@ -107,7 +108,7 @@ class ResilienceStateDictRetriever(Callback):
         **kwargs,
     ) -> None:
         if trainer.global_step == self.retrieve_step:
-            trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.LOCAL
+            trainer.strategy.checkpoint_io.checkpoint_type = self._checkpoint_type
             self._retrieve_state_dict = deepcopy(trainer._checkpoint_connector.dump_checkpoint(weights_only=False))
             if dist.get_rank() == 0:
                 logging.info(f"Retrieve state dict at step {self.retrieve_step}.")
@@ -159,8 +160,8 @@ class TestResilienceCheckpoint(TestCheckpoint):
         )
         new_state_dicts = self.retrieve_state_dicts(trainer)
 
-        for old_state_dict, new_state_dicts in zip(old_state_dicts, new_state_dicts):
-            self.check_correctness(old_state_dict, new_state_dicts, data_module.__class__.__qualname__)
+        for old_state_dict, new_state_dict in zip(old_state_dicts, new_state_dicts):
+            self.check_correctness(old_state_dict, new_state_dict, data_module.__class__.__qualname__)
         assert_state_dict_equal(old_outputs, new_outputs)
         dist.barrier()
 
@@ -217,8 +218,8 @@ class TestResilienceCheckpoint(TestCheckpoint):
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
 
-        # Insert the ResilienceStateDictRetriever callback.
-        state_dict_retriever = ResilienceStateDictRetriever(retrieve_step=1)
+        # Insert the StateDictRetriever callback.
+        state_dict_retriever = StateDictRetriever(retrieve_step=1)
         trainer, data_module, model_module, _ = self.create_and_fit(config, state_dict_retriever)
 
         # Two steps are run. Then we remove one of the directory.
@@ -252,8 +253,8 @@ class TestResilienceCheckpoint(TestCheckpoint):
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
 
-        # Insert the ResilienceStateDictRetriever callback.
-        state_dict_retriever = ResilienceStateDictRetriever(retrieve_step=1)
+        # Insert the StateDictRetriever callback.
+        state_dict_retriever = StateDictRetriever(retrieve_step=1)
         trainer, data_module, _, _ = self.create_and_fit(config, state_dict_retriever)
 
         # Overwrite one of the latest(globa_step 2) checkpoint's local.metadata with global_step 1.

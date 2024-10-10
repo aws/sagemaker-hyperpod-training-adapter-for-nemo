@@ -298,7 +298,7 @@ class BaseModelConfig(BaseModel):
 
 
 class BaseTrainerConfig(BaseModel):
-    devices: int = Field(default=8, ge=1)
+    devices: Union[str, int] = "auto"
     num_nodes: int = Field(default=1, ge=1)
     # https://github.com/Lightning-AI/pytorch-lightning/blob/master/src/lightning/pytorch/trainer/trainer.py#L91
     accelerator: Literal["gpu", "auto"] = "gpu"
@@ -319,7 +319,7 @@ class BaseTrainerConfig(BaseModel):
             # read from torchrun environment variables
             actual_devices = int(os.environ["LOCAL_WORLD_SIZE"])
             actual_num_nodes = int(os.environ["WORLD_SIZE"]) // actual_devices
-            if self.devices != actual_devices:
+            if isinstance(self.devices, int) and self.devices != actual_devices:
                 raise ValueError(
                     f"'devices' ({self.devices}) does not equal actual number of devices ({actual_devices})"
                 )
@@ -328,7 +328,7 @@ class BaseTrainerConfig(BaseModel):
                     f"'num_nodes' ({self.num_nodes}) does not equal actual number of nodes ({actual_num_nodes})"
                 )
 
-        if self.devices % GPUS_PER_NODE != 0:
+        if isinstance(self.devices, int) and self.devices % GPUS_PER_NODE != 0:
             raise ValueError(f"'devices' ({self.devices}) must be a multiple of {GPUS_PER_NODE}")
 
         return self
