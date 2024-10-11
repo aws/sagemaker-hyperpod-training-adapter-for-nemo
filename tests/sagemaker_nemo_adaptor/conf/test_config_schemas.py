@@ -14,8 +14,6 @@ from sagemaker_nemo_adaptor.conf.config_schemas import (
     ConfigAllow,
     ConfigForbid,
     ConfigWithSMPForbid,
-    ModelConfigWithSMP,
-    SageMakerParallelConfig,
 )
 from sagemaker_nemo_adaptor.constants import ModelType
 from tests.fixtures.loggers import sagemaker_logger  # noqa F401
@@ -23,53 +21,6 @@ from tests.fixtures.loggers import sagemaker_logger  # noqa F401
 
 def create_BaseModelConfig():
     return BaseModelConfig(do_finetune=False)
-
-
-class Test_SageMakerParallelConfig:
-    def test_happy_path(self):
-        config = self.build_config()
-
-        try:
-            validated = SageMakerParallelConfig.model_validate(config)
-            assert validated is not None
-        except Exception as e:
-            pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def test_no_args(self):
-        try:
-            validated = SageMakerParallelConfig()
-            assert validated.tensor_model_parallel_degree == 1
-        except Exception as e:
-            pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def test_tp_outside_of_range(self):
-        config = self.build_config(tensor_model_parallel_degree=0)
-
-        with pytest.raises(ValidationError) as e:
-            SageMakerParallelConfig.model_validate(config)
-
-    def test_tp_not_power_of_two(self):
-        config = self.build_config(tensor_model_parallel_degree=3)
-
-        with pytest.raises(ValidationError) as e:
-            SageMakerParallelConfig.model_validate(config)
-
-    def test_default_value(self):
-        config = self.build_config()
-        del config["tensor_model_parallel_degree"]
-
-        try:
-            validated = SageMakerParallelConfig.model_validate(config)
-            assert validated.tensor_model_parallel_degree == 1
-        except Exception as e:
-            pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def build_config(self, **kwargs) -> dict:
-        return {
-            "tensor_model_parallel_degree": 1,
-            "expert_model_parallel_degree": 1,
-            **kwargs,
-        }
 
 
 class Test_BaseModelOptimizerScheduler:
@@ -504,24 +455,6 @@ class Test_BaseConfig:
         }
 
 
-class Test_ModelConfigWithSMP:
-    def test_inheritance(self):
-        config = self.build_config()
-
-        try:
-            validated = ModelConfigWithSMP.model_validate(config)
-            assert isinstance(validated, BaseModelConfig)
-            assert isinstance(validated, SageMakerParallelConfig)
-        except Exception as e:
-            pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def build_config(self, **kwargs) -> dict:
-        return {
-            "do_finetune": False,
-            **kwargs,
-        }
-
-
 class Test_ConfigForbid:
     def test_inheritance(self):
         config = self.build_config()
@@ -560,25 +493,5 @@ class Test_ConfigAllow:
             "distributed_backend": "nccl",
             "trainer": BaseTrainerConfig().model_dump(),
             "model": BaseModelConfig(do_finetune=False).model_dump(),
-            **kwargs,
-        }
-
-
-class Test_ConfigWithSMP:
-    def test_inheritance(self):
-        config = self.build_config()
-
-        try:
-            validated = ConfigWithSMPForbid.model_validate(config)
-            assert isinstance(validated, BaseConfig)
-            assert isinstance(validated.model, ModelConfigWithSMP)
-        except Exception as e:
-            pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def build_config(self, **kwargs) -> dict:
-        return {
-            "distributed_backend": "nccl",
-            "trainer": BaseTrainerConfig().model_dump(),
-            "model": ModelConfigWithSMP(do_finetune=False).model_dump(),
             **kwargs,
         }

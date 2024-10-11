@@ -9,7 +9,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_core.core_schema import FieldValidationInfo
 
 from sagemaker_nemo_adaptor.constants import (
     GPUS_PER_NODE,
@@ -20,6 +19,7 @@ from sagemaker_nemo_adaptor.utils.general_utils import is_power_of_two
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
+smp = None
 
 
 """
@@ -42,6 +42,8 @@ def create_dynamic_model(base_model_cls, extra: str = "forbid"):
 
 
 def get_model_validator(use_smp, extra="forbid") -> type[BaseModel]:
+    global smp
+    smp = use_smp
     if extra == "forbid":
         if use_smp:
             return ConfigWithSMPForbid
@@ -91,19 +93,6 @@ def validate_distributed_degrees(
 """
 BASE CLASSES
 """
-
-
-class SageMakerParallelConfig(BaseModel):
-    tensor_model_parallel_degree: int = Field(default=1, ge=1)
-    expert_model_parallel_degree: int = Field(default=1, ge=1)
-
-    @field_validator("tensor_model_parallel_degree", "expert_model_parallel_degree")
-    @classmethod
-    def validate_tensor_model_parallel_degree(cls, value: int, info: FieldValidationInfo):
-        if not is_power_of_two(value):
-            raise ValueError(f"{info.field_name} must be a power of 2")
-
-        return value
 
 
 class BaseModelOptimizerScheduler(BaseModel):
@@ -227,8 +216,10 @@ class BaseModelConfig(BaseModel):
     limit_all_gathers: bool = True
     use_orig_param: bool = True
 
-    # Parallel degree which can be used w/o smp
+    # Parallel degrees
     context_parallel_degree: int = Field(default=1, ge=1)
+    tensor_model_parallel_degree: int = Field(default=1, ge=1)
+    expert_model_parallel_degree: int = Field(default=1, ge=1)
 
     # Model Architecture
     max_context_width: int = Field(default=2048, ge=1)  # max_context_width is always required for data purposes
@@ -242,8 +233,17 @@ class BaseModelConfig(BaseModel):
     vocab_size: int | None = Field(default=None, ge=1)
     num_key_value_heads: int | None = Field(default=None, ge=1)
     use_flash_attention: bool | None = None
-
+    mistral_sliding_window: int | None = Field(default=None, ge=1)
+    rms_norm_eps: float | None = Field(default=None, ge=0)
     rope_theta: float = Field(default=10000.0)
+
+    # Mixture of Experts
+    mixtral_sliding_window: int | None = Field(default=None, ge=1)
+    num_experts_per_tok: int | None = Field(default=None, ge=1)
+    num_local_experts: int | None = Field(default=None, ge=1)
+    moe_load_balancing: Literal["sinkhorn", "balanced", "aux_loss", "none"] = "sinkhorn"
+    global_token_shuffle: bool | None = None
+    moe_all_to_all_dispatcher: bool | None = None
 
     # fp8
     fp8: bool = True
@@ -299,6 +299,20 @@ class BaseModelConfig(BaseModel):
 
         if self.do_finetune and self.hf_model_name_or_path is None:
             raise ValueError("Must provide 'hf_model_name_or_path' or set 'do_finetune' to False")
+
+        if not smp and (
+            self.tensor_model_parallel_degree > 1
+            or self.expert_model_parallel_degree > 1
+            or self.context_parallel_degree > 1
+        ):
+            raise ValueError(
+                "Non SMP Model implementations do not support tensor_model_parallel_degree, expert_model_parallel_degree, or context_parallel_degree > 1"
+            )
+
+        if not self.activation_checkpointing and self.activation_loading_horizon > 1:
+            _logger.warning(
+                "Note: activation_loading_horizon will not be activated since activation_checkpointing is disabled"
+            )
 
         return self
 
@@ -386,7 +400,6 @@ class BaseRunConfig(BaseModel):
 
 class BaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     name: list[str] = ["hf_llama_8b"]
     use_smp: bool = True
     distributed_backend: Literal["smddp", "nccl"]
@@ -421,10 +434,6 @@ class BaseConfig(BaseModel):
         return self
 
 
-class ModelConfigWithSMP(BaseModelConfig, SageMakerParallelConfig):
-    pass
-
-
 class ConfigForbid(BaseConfig):
     model: create_dynamic_model(BaseModelConfig, extra="forbid")
 
@@ -434,8 +443,8 @@ class ConfigAllow(BaseConfig):
 
 
 class ConfigWithSMPForbid(BaseConfig):
-    model: create_dynamic_model(ModelConfigWithSMP, extra="forbid")
+    model: create_dynamic_model(BaseModelConfig, extra="forbid")
 
 
 class ConfigWithSMPAllow(BaseConfig):
-    model: create_dynamic_model(ModelConfigWithSMP, extra="allow")
+    model: create_dynamic_model(BaseModelConfig, extra="allow")
