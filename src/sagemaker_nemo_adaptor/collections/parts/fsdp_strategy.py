@@ -54,6 +54,7 @@ from sagemaker_nemo_adaptor.utils.get_rank import (
     get_current_replication_group,
     is_action_rank,
 )
+from sagemaker_nemo_adaptor.utils.gpu_utils import initialize_gpu_affinity
 from sagemaker_nemo_adaptor.utils.train_utils import (
     apply_activation_checkpoint,
     patch_neox_rope,
@@ -240,6 +241,12 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             ),
         )
 
+    def _setup_gpu_affinity(self):
+        gpu_affinity = self.cfg.model.get("gpu_affinity", None)
+        if gpu_affinity and not gpu_affinity.get("enabled", True):
+            return
+        initialize_gpu_affinity(self.local_rank, self.num_processes)
+
     def setup(self, trainer: "pl.Trainer") -> None:
         super(NLPFSDPStrategy, self).setup(trainer)
         logging.info(f"Training Model:\n{self.pytorch_model}")
@@ -254,7 +261,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         """
         # Init from original PT-Lightning policy to avoid megatron specific initialization
         super(NLPFSDPStrategy, self).setup_environment()
-
+        self._setup_gpu_affinity()
         tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
