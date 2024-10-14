@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
@@ -23,13 +24,22 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
         super().__init__(*a, **kw)
 
     def save_checkpoint(self, checkpoint: Dict[str, Any], path: _PATH, storage_options: Optional[Any] = None) -> None:
+        # this function may take a long time for large models. the save on rank 0 takes the vast majority of the time.
+        # so if we have a nccl op (barrier) after this function, it will likely timeout while waiting for rank 0, causing a crash.
+        # so create a new process group with a long timeout, and run barrier with this pg before returning.
+        custom_timeout = timedelta(hours=6)
+        pg = dist.new_group(backend="gloo", timeout=custom_timeout)
+
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
         # Save the adapter weights
         trainer.strategy.save_peft_model(path)
-        # Save the fully merged model on rank 0
+        dist.barrier(group=pg)  # Wait for adapter save to finish
+        # Save the fully merged model on rank 0 only
         if dist.get_rank() == 0:
             self._merge_and_upload_peft_model(trainer, path)
+        dist.barrier(group=pg)  # Wait for merged save to finish
+        dist.destroy_process_group(group=pg)
 
     def load_checkpoint(
         self,
@@ -76,7 +86,7 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
         logging.debug(f"Peft model after loading weights: {peft_model}")
         logging.info("Merging the adapter, this might take a while......")
 
-        merged_model = peft_model.merge_and_unload()
+        merged_model = peft_model.merge_and_unload(progressbar=True)
         logging.debug(f"Model after merging: {merged_model}")
 
         if upload_to_storage:
