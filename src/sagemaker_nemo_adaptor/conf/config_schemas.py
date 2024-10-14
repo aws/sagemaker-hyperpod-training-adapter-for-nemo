@@ -289,8 +289,8 @@ class BaseModelConfig(BaseModel):
         if getattr(self, "hidden_size", None) is not None and not is_power_of_two(self.hidden_size):
             _logger.warning(msg_fn("hidden_size", self.hidden_size))
 
-        if getattr(self, "num_heads", None) is not None and not is_power_of_two(self.num_heads):
-            _logger.warning(msg_fn("num_heads", self.num_heads))
+        if getattr(self, "num_attention_heads", None) is not None and not is_power_of_two(self.num_attention_heads):
+            _logger.warning(msg_fn("num_attention_heads", self.num_attention_heads))
 
         if getattr(self, "num_key_value_heads", None) is not None and not (
             self.num_key_value_heads is None or is_power_of_two(self.num_key_value_heads)

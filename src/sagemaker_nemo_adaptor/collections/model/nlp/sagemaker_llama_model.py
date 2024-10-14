@@ -42,20 +42,6 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
             # Update the config based on user's input
             model_config.update(configurable_dict)
         else:
-            rope_scaling = None
-            if self._cfg.rope_scaling_type == "llama3":
-                if pversion.parse(transformers.__version__) < pversion.parse("4.44.2"):
-                    _logger.warning(
-                        f"Rope scaling type 'llama3' is only supported for transformers >= 4.44.2, the current version is {pversion.parse(transformers.__version__)}"
-                    )
-                else:
-                    rope_scaling = {
-                        "rope_type": self._cfg.rope_scaling_type,
-                        "factor": self._cfg.rope_scaling_factor,
-                        "high_freq_factor": self._cfg.rope_scaling_high_freq_factor,
-                        "low_freq_factor": self._cfg.rope_scaling_low_freq_factor,
-                        "original_max_position_embeddings": self._cfg.rope_scaling_original_max_position_embeddings,
-                    }
             model_config = LlamaConfig(
                 **configurable_dict,
                 hidden_act="silu",

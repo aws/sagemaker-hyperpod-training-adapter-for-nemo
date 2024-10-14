@@ -69,7 +69,7 @@ model:
   max_position_embeddings: ${.max_context_width}
   num_hidden_layers: 32
   hidden_size: 4096
-  num_heads: 32
+  num_attention_heads: 32
   intermediate_size: 14336
   initializer_range: 0.02
   layernorm_epsilon: 1e-5
