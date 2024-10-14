@@ -11,7 +11,7 @@ class DummyDataModule(BaseDataModule):
         # TODO make vocab/seq_len configurable
         vocab_size = 1024 if self.cfg.model.get("vocab_size", None) is None else self.cfg.model.vocab_size
         self._train_ds = DummyDataset(vocab_size=vocab_size, seqlen=self.cfg.model.max_context_width)
-        return self._build_dataloader(self._train_ds)
+        return self._build_dataloader(self._train_ds, batch_size=self.cfg.model.train_batch_size)
 
     def val_dataloader(self):
         """We're not doing validation for synthetic data"""
