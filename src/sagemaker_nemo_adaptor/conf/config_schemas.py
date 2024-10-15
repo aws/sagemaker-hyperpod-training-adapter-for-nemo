@@ -364,9 +364,8 @@ class BaseCheckpointCallbackConfig(BaseModel):
 
 class BaseAutoCheckpointConfig(BaseModel):
     enabled: Optional[bool] = False
-    warmup_steps: int = Field(default=12, ge=0)
-    drop_n_warmup_steps: int = Field(default=3, ge=0)
-    interval_guard: float = Field(default=1.25, ge=1.0)
+    warmup_steps: int = Field(default=12, ge=3)
+    drop_n_warmup_steps: int = Field(default=3, ge=2)
 
     @model_validator(mode="after")
     def after_model_validations(self) -> "BaseAutoCheckpoint":

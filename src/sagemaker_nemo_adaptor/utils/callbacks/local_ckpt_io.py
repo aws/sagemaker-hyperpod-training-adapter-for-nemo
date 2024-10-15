@@ -54,17 +54,17 @@ class _Profiler:
         ctx = mp.get_context("fork")
         self.start = ctx.Manager().Value("d", -1.0)
         self.end = ctx.Manager().Value("d", -1.0)
-        self._max_duration = -1.0
+        self._duration = -1.0
 
     @property
-    def max_duration(self):
-        return self._max_duration
+    def duration(self):
+        return self._duration
 
     def update(self):
         start = self.start.value
         end = self.end.value
         duration = end - start
-        self._max_duration = max(self._max_duration, duration)
+        self._duration = duration
 
 
 class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
@@ -73,6 +73,15 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         self.app_state = SageMakerAppState()
         self.queue = AsyncCallsQueue()
         self.profiler = _Profiler()
+        self._ckpt_preprocessing_duration = 0
+
+    @property
+    def io_duration(self):
+        return self.profiler.duration
+
+    @property
+    def ckpt_preprocessing_duration(self):
+        return self._ckpt_preprocessing_duration
 
     @staticmethod
     @retry_with_jitter
@@ -122,6 +131,7 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
             pre_write_hooks=[on_start],
             post_write_hooks=[hook, on_end],
         )
+        s = time.perf_counter()
         saver.async_save(
             checkpoint,
             storage_writer=storage_writer,
@@ -131,6 +141,7 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
             force_check_all_plans=False,
             wait_error_handling=False,
         )
+        self._ckpt_preprocessing_duration = time.perf_counter() - s
 
     def load_checkpoint(
         self,

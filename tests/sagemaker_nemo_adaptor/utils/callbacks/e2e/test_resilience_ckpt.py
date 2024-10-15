@@ -1,4 +1,3 @@
-import math
 import os
 import shutil
 from copy import deepcopy
@@ -7,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 import pytorch_lightning as pl
-import torch
 import torch.distributed as dist
 from lightning.pytorch.callbacks import Callback
 from nemo.utils import logging
@@ -20,12 +18,13 @@ from test_utils import (
 from torch.sagemaker.distributed.checkpoint.filesystem import (
     DistributedFileSystemWriter,
 )
+from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
+    compute_auto_checkpoint_interval,
+)
 
 from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
 
 enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
-
-from pathlib import Path
 
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
@@ -46,12 +45,15 @@ class ResilienceIntervalRetriever(Callback):
     2. use all_reduce to get global min train time and max write time.
     """
 
-    def __init__(self, warmup_steps, drop_n_warmup_steps, interval_guard):
-        self._warmup_steps = warmup_steps
-        self._drop_n_warmup_steps = drop_n_warmup_steps
-        self._interval_guard = interval_guard
-        self._training_step_timings = []
-        self._ckpt_write_timings = []
+    def __init__(self, warmup_steps, drop_n_warmup_steps):
+        self.warmup_start = drop_n_warmup_steps
+        self.ckpt_warmup_end = self.warmup_start + warmup_steps
+        self.step_warmup_end = self.ckpt_warmup_end + warmup_steps
+        self.step_durations = []
+        self.step_ckpt_durations = []
+        self.ckpt_preprocessing_durations = []
+        self.ckpt_io_durations = []
+        self.step = 0
 
     def on_train_batch_end(
         self,
@@ -59,38 +61,36 @@ class ResilienceIntervalRetriever(Callback):
         *args,
         **kwargs,
     ) -> None:
-        self.retrieve_train_time(trainer)
-        self.retrieve_write_time(trainer)
+        self.step += 1
+        self.retrieve(trainer)
 
-    def retrieve_train_time(self, trainer):
-        global_step = trainer.global_step
-        if global_step > self._warmup_steps + 1 or global_step < self._drop_n_warmup_steps:
-            return
+    def retrieve(self, trainer):
         decision_maker = trainer.checkpoint_callback._interval_decision_maker
-        self._training_step_timings.append(decision_maker._end - decision_maker._start)
-
-    def retrieve_write_time(self, trainer):
-        global_step = trainer.global_step
-        if global_step > self._warmup_steps + 1 or global_step < self._drop_n_warmup_steps:
+        step_duration = decision_maker._end - decision_maker._start
+        if step_duration == 0:
             return
-
+        if self.step < self.warmup_start:
+            return
         typ = SageMakerCheckpointType.LOCAL
         checkpoint_io = trainer.strategy.checkpoint_io[typ]
-        max_ckpt_duration = checkpoint_io.profiler.max_duration
-        self._ckpt_write_timings.append(max_ckpt_duration)
+        if self.step < self.ckpt_warmup_end:
+            self.step_ckpt_durations.append(step_duration)
+            self.ckpt_preprocessing_durations.append(checkpoint_io.ckpt_duration)
+            self.ckpt_io_durations.append(checkpoint_io.io_duration)
+            return
+        if self.step < self.step_warmup_end:
+            self.step_durations.append(step_duration)
+            return
 
     def calculate_interval(self):
-        local_min_train_time = min(self._training_step_timings)
-        local_max_write_time = max(self._ckpt_write_timings)
-        train_time = torch.tensor(local_min_train_time, dtype=torch.float16, device=torch.cuda.current_device())
-        write_time = torch.tensor(local_max_write_time, dtype=torch.float16, device=torch.cuda.current_device())
-
-        dist.all_reduce(train_time, op=dist.ReduceOp.MIN)
-        dist.all_reduce(write_time, op=dist.ReduceOp.MAX)
-        global_min_train_time = train_time.item()
-        global_max_write_time = write_time.item()
-        interval = int(math.ceil(global_max_write_time / global_min_train_time * self._interval_guard))
-        return int(max(interval, 1))
+        # Merge all durations
+        interval = compute_auto_checkpoint_interval(
+            self.step_durations,
+            self.step_ckpt_durations,
+            self.ckpt_preprocessing_durations,
+            self.ckpt_io_durations,
+        )
+        return interval.interval
 
 
 class StateDictRetriever(Callback):
@@ -174,19 +174,17 @@ class TestResilienceCheckpoint(TestCheckpoint):
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
 
         # Set up for resilience checkpoint with dynamic interval
-        config.trainer.max_steps = 6
+        config.trainer.max_steps = 16
         config.exp_manager.auto_checkpoint.warmup_steps = 4
-        config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 1
-        config.exp_manager.auto_checkpoint.interval_guard = 1.25
+        config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 2
 
         # Insert the ResilienceIntervalRetriever callback.
         auto_checkpoint = config.exp_manager.auto_checkpoint
         interval_retriever = ResilienceIntervalRetriever(
             warmup_steps=auto_checkpoint.warmup_steps,
             drop_n_warmup_steps=auto_checkpoint.drop_n_warmup_steps,
-            interval_guard=auto_checkpoint.interval_guard,
         )
-        trainer, _, _, _ = self.create_and_fit(config, interval_retriever)
+        trainer, _, _, _ = self.create_and_fit(config, callbacks=[interval_retriever])
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.LOCAL
 
         # Check that resilience callback intervals is the same as manual calculated one.

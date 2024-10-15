@@ -37,7 +37,6 @@ class SageMakerAutoCheckpoint:
     enabled: bool = False
     warmup_steps: int = 12
     drop_n_warmup_steps: int = 3
-    interval_guard: float = 1.25
 
 
 @dataclass

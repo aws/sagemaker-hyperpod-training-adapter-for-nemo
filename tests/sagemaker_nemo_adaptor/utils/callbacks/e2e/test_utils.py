@@ -249,7 +249,6 @@ class TestCheckpoint:
         config.exp_manager.auto_checkpoint.enabled = auto_checkpoint
         config.exp_manager.auto_checkpoint.warmup_steps = 0
         config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 0
-        config.exp_manager.auto_checkpoint.interval_guard = 1.25
 
         # full
         config.exp_manager.export_full_model.every_n_train_steps = every_n_train_steps
