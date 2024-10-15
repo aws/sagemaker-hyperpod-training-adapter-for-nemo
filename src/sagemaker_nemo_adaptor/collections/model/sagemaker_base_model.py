@@ -1,5 +1,6 @@
 import math
 import os
+import time
 from typing import Any, Dict, Optional, Union
 
 import torch
@@ -26,7 +27,10 @@ from sagemaker_nemo_adaptor.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
 from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
-from sagemaker_nemo_adaptor.utils.train_utils import get_batch_for_cp_rank
+from sagemaker_nemo_adaptor.utils.train_utils import (
+    compute_tflops,
+    get_batch_for_cp_rank,
+)
 
 TF_VERSION = pversion.parse(transformers.__version__)
 
@@ -135,6 +139,9 @@ class SageMakerNLPBaseModel(ModelPT):
         if hasattr(self.model_config, "use_cache"):
             self.model_config.use_cache = False
         # Adding delayed_param config to HF model config
+        self.dp_size = dist.get_world_size() // (
+            self._cfg.get("context_parallel_degree", 1) * self._cfg.get("tensor_model_parallel_degree", 1)
+        )
         self.model_config.delayed_param = self._cfg.delayed_param
         model = self._initialize_model(self.model_config)
         if self.do_patch_attn_context_parallel:
@@ -361,6 +368,7 @@ class SageMakerNLPBaseModel(ModelPT):
         Parse input batch, pre-process for context parallel
         """
         input_ids, _, labels = self.trainer.datamodule.get_batch(batch)
+        self.batch_num_sequences = input_ids.shape[0]
         if self._cfg.get("context_parallel_degree", 1) > 1:
             input_ids, labels = get_batch_for_cp_rank((input_ids, labels))
 
@@ -411,10 +419,25 @@ class SageMakerNLPBaseModel(ModelPT):
     def forward(self, *a, **kw):
         return self.model(*a, **kw)
 
+    def on_train_batch_start(self, *args, **kwargs):
+        self.batch_start_time = time.time()
+
     def on_train_batch_end(self, *args, **kwargs):
         """
         Hook called at the end of each training batch, do logging here
         """
+        if self.trainer.strategy.cfg.log_perf_metrics:
+            self.step_time = time.time() - self.batch_start_time
+            self.sample_processed = self.batch_num_sequences * self.dp_size
+            throughput = self.sample_processed / self.step_time
+
+            tflops_gpu = compute_tflops(
+                self.cfg, self.model_config, self.sample_processed, self.step_time, dist.get_world_size()
+            )
+            self.log("Step Time", self.step_time, prog_bar=True)
+            self.log("TFLOPS/GPU", tflops_gpu, prog_bar=True)
+            self.log("Samples/Second", throughput, prog_bar=True)
+
         loss_scalar = self._process_loss(self.loss, reduce_loss=self._cfg.log_reduced_training_loss)
         self.log("Loss/train", loss_scalar, prog_bar=True)
         self.log("Norms/grad_norm", self.grad_norm, prog_bar=True)

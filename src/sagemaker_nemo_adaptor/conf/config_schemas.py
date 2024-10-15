@@ -402,6 +402,7 @@ class BaseConfig(BaseModel):
     name: list[str] = ["hf_llama_8b"]
     use_smp: bool = True
     distributed_backend: Literal["smddp", "nccl"]
+    log_perf_metrics: bool = False
 
     model: BaseModel
     trainer: BaseTrainerConfig
