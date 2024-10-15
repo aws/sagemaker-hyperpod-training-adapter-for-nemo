@@ -29,7 +29,7 @@ except ImportError:
     SUPPORT_CHECKPOINT = False
 
 try:
-    from sagemaker_nemo_adaptor.utils.callbacks.tracer import VizTracerCallback
+    from sagemaker_nemo_adaptor.utils.tracer_utils import VizTracerProfiler
 
     SUPPORT_VIZTRACER = True
 except ImportError:
@@ -55,6 +55,23 @@ def _disable_aiobotocore_credential_log():
     logger.setLevel(logging.WARNING)
 
 
+def _get_viztracer_profiler(cfg):
+    if not SUPPORT_VIZTRACER:
+        return
+    viztracer = cfg.model.get("viztracer", None)
+    if not viztracer:
+        return
+    enabled = viztracer.get("enabled", False)
+    if not enabled:
+        return
+    init_kwargs = OmegaConf.to_container(viztracer, resolve=True)
+    init_kwargs.pop("enabled", None)
+    if not init_kwargs.get("output_file", None):
+        path = os.path.join(cfg.exp_manager.exp_dir, "result.json")
+        init_kwargs["output_file"] = path
+    return VizTracerProfiler(**init_kwargs)
+
+
 class SageMakerTrainerBuilder:
     """
     Builder type to hide complex configuration of PTL Trainers for SMP/HF models.
@@ -62,9 +79,15 @@ class SageMakerTrainerBuilder:
     """
 
     def __init__(self, cfg: DictConfig) -> None:
+        self._profile(cfg)
         self.cfg = cfg
         _disable_flash_attn_info_log()
         _disable_aiobotocore_credential_log()
+
+    def _profile(self, cfg):
+        self.tracer = _get_viztracer_profiler(cfg)
+        if self.tracer:
+            self.tracer.start()
 
     def _training_strategy(self) -> Union[SageMakerDDPStrategy, SageMakerFSDPStrategy]:
         """
@@ -150,26 +173,6 @@ class SageMakerTrainerBuilder:
             )
         ]
 
-    def _create_viztracer_callbacks(self):
-        if not SUPPORT_VIZTRACER:
-            return []
-
-        viztracer = self.cfg.model.get("viztracer", None)
-        if not viztracer:
-            return []
-
-        enabled = viztracer.get("enabled", False)
-        if not enabled:
-            return []
-
-        init_kwargs = OmegaConf.to_container(viztracer, resolve=True)
-        init_kwargs.pop("enabled", None)
-        if not init_kwargs.get("output_file", None):
-            path = os.path.join(self.cfg.exp_manager.exp_dir, "result.json")
-            init_kwargs["output_file"] = path
-
-        return [VizTracerCallback(**init_kwargs)]
-
     def _create_plugins(self) -> list:
         plugins = []
 
@@ -182,7 +185,6 @@ class SageMakerTrainerBuilder:
         assert callbacks is None or isinstance(callbacks, list)
         callbacks = callbacks if callbacks else []
         callbacks += self._create_nsys_callbacks()
-        callbacks += self._create_viztracer_callbacks()
         callbacks += self._create_checkpoint_callbacks()
         return callbacks
 

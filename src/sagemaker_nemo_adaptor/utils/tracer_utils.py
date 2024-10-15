@@ -7,14 +7,13 @@ import sys
 import tempfile
 import threading
 
-import torch.distributed as dist
-from pytorch_lightning.callbacks import Callback
+from nemo.utils import logging
 from viztracer import VizTracer
 from viztracer.patch import install_all_hooks
 from viztracer.report_builder import ReportBuilder
 
 
-class VizTracerCallback(Callback):
+class VizTracerProfiler:
     def __init__(self, ranks, **kw):
         self.ranks = ranks
         self.init_kwargs = copy.deepcopy(kw)
@@ -31,22 +30,30 @@ class VizTracerCallback(Callback):
         self.pid_suffix = kw["pid_suffix"]
         self.tracer = None
 
-    def setup(self, *a, **kw):
-        if dist.get_rank() in self.ranks:
-            self.multiprocess_output_dir = tempfile.mkdtemp()
-            init_kwargs = copy.deepcopy(self.init_kwargs)
-            init_kwargs["output_file"] = os.path.join(self.multiprocess_output_dir, "result.json")
+        # We cannot use dist.get_rank() because `init_process_group` may not
+        # be called when the tracer is created.
+        self.rank = int(os.environ.get("RANK", -1))
 
-            # trace all fork processes
-            self.tracer = VizTracer(**init_kwargs)
-            install_all_hooks(self.tracer, [], patch_multiprocess=True)
+    def start(self, *a, **kw):
+        if self.rank < 0:
+            logging.warning("Global rank not found. Disable Viztracer")
+            return
+        if self.rank not in self.ranks:
+            return
+        self.multiprocess_output_dir = tempfile.mkdtemp()
+        init_kwargs = copy.deepcopy(self.init_kwargs)
+        init_kwargs["output_file"] = os.path.join(self.multiprocess_output_dir, "result.json")
 
-            def term_handler(signalnum, frame):
-                sys.exit(0)
+        # trace all fork processes
+        self.tracer = VizTracer(**init_kwargs)
+        install_all_hooks(self.tracer, [], patch_multiprocess=True)
 
-            signal.signal(signal.SIGTERM, term_handler)
-            multiprocessing.util.Finalize(self, self.exit_routine, exitpriority=-1)
-            self.tracer.start()
+        def term_handler(signalnum, frame):
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, term_handler)
+        multiprocessing.util.Finalize(self, self.exit_routine, exitpriority=-1)
+        self.tracer.start()
 
     def save(self):
         try:
