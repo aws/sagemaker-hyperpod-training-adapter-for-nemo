@@ -100,6 +100,10 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
     def on_end(end, writer):
         end.value = time.perf_counter()
 
+    def wait(self):
+        self.queue.maybe_finalize_async_calls(blocking=True, skip_sync=True)
+        self.profiler.update()
+
     def save_checkpoint(
         self,
         checkpoint: Dict[str, Any],
@@ -108,8 +112,7 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
     ) -> None:
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
-        self.queue.maybe_finalize_async_calls(blocking=True, skip_sync=True)
-        self.profiler.update()
+        self.wait()
 
         # hooks
         on_start = functools.partial(
