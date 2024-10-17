@@ -131,7 +131,7 @@ class _IntervalDecisionMaker:
         self._end = time.perf_counter()
         self.step += 1
 
-    def get_interval(self, checkpoint_io, ckpt_preprocessing_duration, ckpt_io_duration):
+    def get_interval(self, checkpoint_io, ckpt_preprocessing_duration):
         """Compute checkpoint interval
 
         Flow:
@@ -155,15 +155,17 @@ class _IntervalDecisionMaker:
         step_duration = self._end - self._start
         if step_duration == 0:
             return 1
-        if self.step < self.warmup_start:
+        if self.step <= self.warmup_start:
             return 1
-        if self.step < (self.ckpt_warmup_end - 1):
+        if self.step <= (self.ckpt_warmup_end - 1):
+            ckpt_io_duration = checkpoint_io.io_duration
             self.step_ckpt_durations.append(step_duration)
             self.ckpt_preprocessing_durations.append(ckpt_preprocessing_duration)
             self.ckpt_io_durations.append(ckpt_io_duration)
-            return 1
-        if self.step == (self.ckpt_warmup_end - 1):
+            return int(self.step < (self.ckpt_warmup_end - 1))
+        if self.step == self.ckpt_warmup_end:
             checkpoint_io.wait()
+            ckpt_io_duration = checkpoint_io.io_duration
             self.step_ckpt_durations.append(step_duration)
             self.ckpt_preprocessing_durations.append(ckpt_preprocessing_duration)
             self.ckpt_io_durations.append(ckpt_io_duration)
@@ -172,6 +174,7 @@ class _IntervalDecisionMaker:
             self.step_durations.append(step_duration)
             return 0
 
+        self.step_durations.append(step_duration)
         assert len(self.step_durations) == self.warmup_steps
         assert len(self.step_ckpt_durations) == self.warmup_steps
         assert len(self.ckpt_preprocessing_durations) == self.warmup_steps
@@ -270,12 +273,8 @@ class SageMakerModelCheckpointResilience(SageMakerModelCheckpointBase):
         ckpt_preprocessing_duration = checkpoint_io.ckpt_preprocessing_duration
         super().on_train_batch_end(trainer, *args, **kwargs)
 
-        # We have to fetch io_duration after save_checkpoint because the I/O
-        # duration we get is the previous checkpoint I/O time.
-        io_duration = checkpoint_io.io_duration
-
         # Update the next every_n_train_steps
-        interval = self._interval_decision_maker.get_interval(checkpoint_io, ckpt_preprocessing_duration, io_duration)
+        interval = self._interval_decision_maker.get_interval(checkpoint_io, ckpt_preprocessing_duration)
         self._every_n_train_steps = interval
 
     def on_train_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
