@@ -300,13 +300,9 @@ class BaseModelConfig(BaseModel):
         if self.do_finetune and self.hf_model_name_or_path is None:
             raise ValueError("Must provide 'hf_model_name_or_path' or set 'do_finetune' to False")
 
-        if not smp and (
-            self.tensor_model_parallel_degree > 1
-            or self.expert_model_parallel_degree > 1
-            or self.context_parallel_degree > 1
-        ):
+        if not smp and (self.tensor_model_parallel_degree > 1 or self.expert_model_parallel_degree > 1):
             raise ValueError(
-                "Non SMP Model implementations do not support tensor_model_parallel_degree, expert_model_parallel_degree, or context_parallel_degree > 1"
+                "Non SMP Model implementations do not support tensor_model_parallel_degree or expert_model_parallel_degree > 1"
             )
 
         if not self.activation_checkpointing and self.activation_loading_horizon > 1:
