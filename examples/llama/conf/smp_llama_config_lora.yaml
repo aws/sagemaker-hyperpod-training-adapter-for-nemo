@@ -5,7 +5,7 @@ trainer:
   precision: bf16
   max_steps: 50
   log_every_n_steps: 1
-  val_check_interval: -1
+  val_check_interval: 0
   limit_val_batches: 0 # Number of batches per each validation run, set to 0 to disable validation.
 
 

@@ -209,11 +209,7 @@ class SageMakerTrainerBuilder:
             log_every_n_steps=self.cfg.trainer.log_every_n_steps,
             # Disable deafult lightning ModelCheckpoint if none of them are used.
             enable_checkpointing=self.use_generic_checkpoint or self.use_resilience_checkpoint,
-            val_check_interval=(
-                self.cfg.trainer.max_steps + 1
-                if self.cfg.trainer.val_check_interval < 0
-                else self.cfg.trainer.val_check_interval
-            ),
+            val_check_interval=self.cfg.trainer.val_check_interval,
             limit_val_batches=self.cfg.trainer.limit_val_batches,
             devices=self.cfg.trainer.get("devices", "auto"),
         )
