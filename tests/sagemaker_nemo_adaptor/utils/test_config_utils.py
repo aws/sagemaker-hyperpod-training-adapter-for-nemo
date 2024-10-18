@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from omegaconf import OmegaConf
 from pydantic import BaseModel
@@ -45,7 +47,8 @@ def test_validate_custom_recipe_extra_params(sample_config):
         pass
 
     with pytest.raises(AttributeError):
-        _validate_custom_recipe_extra_params(MockModel)
+        with patch("os.environ['SLURM_JOB_ID']", return_value=True):
+            _validate_custom_recipe_extra_params(MockModel)
 
 
 def test_validate_schema(sample_config):

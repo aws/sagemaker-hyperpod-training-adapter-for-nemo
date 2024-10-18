@@ -15,7 +15,7 @@ from sagemaker_nemo_adaptor.constants import (
     ModelType,
     SageMakerMonitorMode,
 )
-from sagemaker_nemo_adaptor.utils.general_utils import is_power_of_two
+from sagemaker_nemo_adaptor.utils.general_utils import is_power_of_two, is_slurm_run
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
@@ -394,7 +394,8 @@ class BaseRunConfig(BaseModel):
 
 
 class BaseConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Only disable extra args for slurm workflow
+    model_config = ConfigDict(extra="forbid" if is_slurm_run() else "allow")
     name: list[str] = ["hf_llama_8b"]
     use_smp: bool = True
     distributed_backend: Literal["smddp", "nccl"]

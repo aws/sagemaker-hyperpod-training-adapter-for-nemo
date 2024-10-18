@@ -7,6 +7,7 @@ from transformers import AutoConfig
 
 from sagemaker_nemo_adaptor.conf.config_schemas import get_model_validator
 from sagemaker_nemo_adaptor.constants import ModelType
+from sagemaker_nemo_adaptor.utils.general_utils import is_slurm_run
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
@@ -52,7 +53,7 @@ def _validate_custom_recipe_extra_params(model: type[BaseModel]) -> None:
     """
     extra_fields = model.__pydantic_extra__
 
-    if extra_fields:
+    if extra_fields and is_slurm_run():
         msg = f"The recipe received defines the following keys that are not pre-defined for this model: {extra_fields}"
         _logger.error(msg)
         raise AttributeError(msg)
@@ -69,7 +70,6 @@ def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config)
 def _validate_schema(cfg: DictConfig, extra="forbid") -> tuple[DictConfig, type[BaseModel]]:
     SchemaValidator = get_model_validator(use_smp=cfg.use_smp, extra=extra)
     config_dict = OmegaConf.to_container(cfg, resolve=True)
-
     try:
         validated_model = SchemaValidator.model_validate(config_dict)
         validated_model_dict = validated_model.model_dump()
