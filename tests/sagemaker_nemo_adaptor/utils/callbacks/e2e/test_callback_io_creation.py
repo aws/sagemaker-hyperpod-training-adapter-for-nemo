@@ -1,4 +1,5 @@
 import os
+from contextlib import nullcontext
 
 import pytest
 from test_utils import TestCheckpoint
@@ -51,12 +52,18 @@ class TestCheckpointCreation(TestCheckpoint):
         config = self.update_checkpoint_config(
             config, (save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type)
         )
-        trainer, _ = SageMakerTrainerBuilder(config).create_trainer()
-
         is_sharded = save_top_k > 0 or sharded_save_last
         is_resilience = auto_checkpoint
         is_full = every_n_train_steps > 0 or save_full_last
         is_peft = peft_type != None
+        should_raise_error = is_resilience and is_sharded
+        context = nullcontext() if not should_raise_error else pytest.raises(AssertionError)
+
+        with context:
+            trainer, _ = SageMakerTrainerBuilder(config).create_trainer()
+
+        if should_raise_error:
+            return
 
         # test checkpoint callbacks
         if is_peft:

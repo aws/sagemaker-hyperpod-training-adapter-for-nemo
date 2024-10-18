@@ -111,6 +111,9 @@ class SageMakerTrainerBuilder:
         sharded_save_any = self.cfg.exp_manager.checkpoint_callback_params.get("save_top_k", 0) != 0
         sharded_save_last = self.cfg.exp_manager.checkpoint_callback_params.get("save_last", True)
         export_sharded = sharded_save_any or sharded_save_last
+        assert not (
+            self.use_resilience_checkpoint and export_sharded
+        ), "Turning on auto_checkpoint and checkpoint in checkpoint_callback_paramsare are mutually exclusive"
 
         # Full checkpoint
         full_save_any = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0

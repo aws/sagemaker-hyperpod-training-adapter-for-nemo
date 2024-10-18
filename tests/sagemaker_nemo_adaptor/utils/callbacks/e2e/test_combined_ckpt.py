@@ -39,11 +39,11 @@ class TestCombinedCheckpoint(TestCheckpoint):
         # full will save @ step 3
         # Turn on all checkpoints.
         # save_top_k, sharded_save_last, auto_checkpoint, every_n_train_steps, save_full_last, peft_type
-        self.update_checkpoint_config(config, (3, False, True, 5, True, None))
+        self.update_checkpoint_config(config, (0, False, True, 5, True, None))
         config.exp_manager.checkpoint_callback_params.every_n_train_steps = 2
         config.trainer.max_steps = 3
 
-        state_dict_retriever = StateDictRetriever(retrieve_step=2, checkpoint_type=SageMakerCheckpointType.SHARDED)
+        state_dict_retriever = StateDictRetriever(retrieve_step=3, checkpoint_type=SageMakerCheckpointType.SHARDED)
         trainer, data_module, model_module, old_outputs = self.create_and_fit(config, callbacks=[state_dict_retriever])
 
         # Check LOCAL saved checkpoint files.
@@ -54,18 +54,6 @@ class TestCombinedCheckpoint(TestCheckpoint):
         ep_degree = model_config.get("expert_model_parallel_degree", 1)
         total_degree = fsdp_degree * tp_degree * ep_degree
         assert len(list(os.scandir(os.path.join(config.exp_manager.checkpoint_dir, "local", "0")))) == total_degree
-
-        # Check SHARDED saved checkpoint files.
-        sharded_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "sharded")
-        assert os.path.exists(sharded_checkpoint_dir)
-        checkpoint_callback_params = config.exp_manager.checkpoint_callback_params
-        num_checkpoints_save = config.trainer.max_steps // checkpoint_callback_params.every_n_train_steps
-        # Check if extra last step is saved.
-        if checkpoint_callback_params.save_last:
-            num_checkpoints_save += int(config.trainer.max_steps % checkpoint_callback_params.every_n_train_steps > 0)
-        if num_checkpoints_save > checkpoint_callback_params.save_top_k:
-            num_checkpoints_save = checkpoint_callback_params.save_top_k
-        assert len(list(os.scandir(sharded_checkpoint_dir))) == num_checkpoints_save
 
         # Check FULL saved checkpoint files.
         full_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "full")
@@ -86,13 +74,7 @@ class TestCombinedCheckpoint(TestCheckpoint):
         assert "pytorch_model.bin" in [v.name for v in all_files]
         assert "config.json" in [v.name for v in all_files]
 
-        # Loaded the sharded checkpoint from step 2.
-        sharded_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "sharded")
-        lastest_checkpoint = list(os.scandir(sharded_checkpoint_dir))[-1]
-        # Create a new trainer and load the checkpoint
-        config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         # Stop training and further
-        config.trainer.max_steps = 2
         logging.info("Creating a new trainer and loading the checkpoint")
         trainer, data_module, model_module, new_outputs = self.create_and_fit(config)
         new_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.SHARDED])[0]
