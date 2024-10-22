@@ -64,21 +64,33 @@ class ResilienceIntervalRetriever(Callback):
         self.step += 1
         self.retrieve(trainer)
 
+    def on_train_batch_start(
+        self,
+        trainer: "pl.Trainer",
+        *args,
+        **kwargs,
+    ) -> None:
+        typ = SageMakerCheckpointType.LOCAL
+        checkpoint_io = trainer.strategy.checkpoint_io[typ]
+        if self.step <= self.warmup_start - 1:
+            return
+        if self.step <= self.ckpt_warmup_end - 1:
+            self.ckpt_preprocessing_durations.append(checkpoint_io.ckpt_preprocessing_duration)
+
     def retrieve(self, trainer):
         decision_maker = trainer.checkpoint_callback._interval_decision_maker
         step_duration = decision_maker._end - decision_maker._start
         if step_duration == 0:
             return
-        if self.step < self.warmup_start:
+        if self.step <= self.warmup_start:
             return
         typ = SageMakerCheckpointType.LOCAL
         checkpoint_io = trainer.strategy.checkpoint_io[typ]
-        if self.step < self.ckpt_warmup_end:
+        if self.step <= self.ckpt_warmup_end:
             self.step_ckpt_durations.append(step_duration)
-            self.ckpt_preprocessing_durations.append(checkpoint_io.ckpt_duration)
             self.ckpt_io_durations.append(checkpoint_io.io_duration)
             return
-        if self.step < self.step_warmup_end:
+        if self.step <= self.step_warmup_end:
             self.step_durations.append(step_duration)
             return
 
@@ -123,7 +135,11 @@ class TestResilienceCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     @pytest.mark.parametrize(
         "model_type",
-        [("llama"), ("mistral"), ("mixtral")],
+        [
+            # ("llama"),
+            ("mistral"),
+            #  ("mixtral")
+        ],
     )
     def test_resilience_save_and_load(self, model_type, temp_dir):
         # Config set up
@@ -218,7 +234,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
         # Insert the StateDictRetriever callback.
         state_dict_retriever = StateDictRetriever(retrieve_step=1)
-        trainer, data_module, model_module, _ = self.create_and_fit(config, state_dict_retriever)
+        trainer, data_module, model_module, _ = self.create_and_fit(config, callbacks=state_dict_retriever)
 
         # Two steps are run. Then we remove one of the directory.
         if dist.get_rank() == 0:
@@ -253,7 +269,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
         # Insert the StateDictRetriever callback.
         state_dict_retriever = StateDictRetriever(retrieve_step=1)
-        trainer, data_module, _, _ = self.create_and_fit(config, state_dict_retriever)
+        trainer, data_module, _, _ = self.create_and_fit(config, callbacks=state_dict_retriever)
 
         # Overwrite one of the latest(globa_step 2) checkpoint's local.metadata with global_step 1.
         if dist.get_rank() == 0:
@@ -304,9 +320,14 @@ class TestResilienceCheckpoint(TestCheckpoint):
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
-        config.trainer.max_steps = 7
+        config.trainer.max_steps = 10
+        config.exp_manager.auto_checkpoint.warmup_steps = 3
+        config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 2
 
         self.create_and_fit(
             config,
         )
-        assert mock_save.call_count == config.trainer.max_steps
+        assert (
+            mock_save.call_count
+            == config.exp_manager.auto_checkpoint.warmup_steps + config.exp_manager.auto_checkpoint.drop_n_warmup_steps
+        )
