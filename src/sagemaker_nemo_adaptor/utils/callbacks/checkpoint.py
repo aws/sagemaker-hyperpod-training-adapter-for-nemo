@@ -80,6 +80,7 @@ class SageMakerModelCheckpointBase(Checkpoint):
         trainer._checkpoint_connector._loaded_checkpoint = state_dict
         trainer._checkpoint_connector.restore_loops()
         trainer._checkpoint_connector._loaded_checkpoint = None
+        trainer.fit_loop.epoch_loop.batch_progress.increment_completed()
 
     def _save(
         self,
