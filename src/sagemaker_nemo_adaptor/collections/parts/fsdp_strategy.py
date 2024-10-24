@@ -278,7 +278,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
         tensor_parallel_degree = self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1
-        context_parallel_degree = self.smp_config_dict["context_parallel_degree"] if self.use_smp else 1
+        context_parallel_degree = self.cfg.model.get("context_parallel_degree", 1)
         initialize_model_parallel_for_nemo(
             world_size=self.world_size,
             global_rank=self.global_rank,
