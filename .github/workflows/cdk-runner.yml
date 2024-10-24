@@ -1,18 +1,16 @@
 name: Pipeline Synthesis
 
 env:
-  # Replace with desired release branch (should be same for launcher and adapter)
-  # e.g. 'release/v1.0.0'
   # Note that the launcher branch needs to be created first as a prerequisite
-  BRANCH: 'main'
-  PIPELINE_NAME_PREFIX: 'hp-recipes-pipeline'
+  # Replace with desired launcher branch here, if not specified will use the same branch as the adaptor
+  # LAUNCHER_BRANCH: 'main'
+  PIPELINE_NAME_PREFIX: 'hp'
 
 on:
   create:
     branches:
       - 'main'
-      # Note: Cannot use env variables for the trigger so make sure to add the env.BRANCH specified above
-      # TODO: Find a better way to trigger without hard coding - possibly trigger for all "release/**" branches
+      - 'release-*'
 
 permissions:
    id-token: write # This is required for requesting the JWT
@@ -60,4 +58,8 @@ jobs:
       - name: Synthesize Pipeline
         run: |
           cd SagemakerTrainingLauncherIntegrationTests/cdk
-          cdk deploy --require-approval never --region us-west-2 --context pipeline_name_prefix=${{ env.PIPELINE_NAME_PREFIX }} --context private_sagemaker_training_launcher_staging_branch_name=${{ env.BRANCH }} --context private_sagemaker_training_adapter_for_nemo_staging_branch_name=${{ env.BRANCH }}
+          if [ -n "${{ env.LAUNCHER_BRANCH }}" ]; then
+            cdk deploy --require-approval never --region us-west-2 --context pipeline_name_prefix=${{ env.PIPELINE_NAME_PREFIX }} --context private_sagemaker_training_launcher_staging_branch_name=${{ env.LAUNCHER_BRANCH  }} --context private_sagemaker_training_adapter_for_nemo_staging_branch_name=${{ github.ref_name }}
+          else
+            cdk deploy --require-approval never --region us-west-2 --context pipeline_name_prefix=${{ env.PIPELINE_NAME_PREFIX }} --context private_sagemaker_training_launcher_staging_branch_name=${{ github.ref_name }} --context private_sagemaker_training_adapter_for_nemo_staging_branch_name=${{ github.ref_name }}
+          fi
