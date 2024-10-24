@@ -158,8 +158,8 @@ class BaseVizTracerConfig(BaseModel):
     tracer_entries: int = 1000000
     verbose: int = 1
     max_stack_depth: int = -1
-    ignore_c_function: bool = False
-    ignore_frozen: bool = False
+    ignore_c_function: bool = True
+    ignore_frozen: bool = True
     log_func_retval: bool = False
     log_func_args: bool = False
     log_print: bool = False
@@ -171,7 +171,7 @@ class BaseVizTracerConfig(BaseModel):
     file_info: bool = True
     register_global: bool = True
     trace_self: bool = False
-    min_duration: float = 0
+    min_duration: float = 200
     minimize_memory: bool = False
     dump_raw: bool = False
     sanitize_function_name: bool = False
