@@ -3,7 +3,8 @@ name: Code commit replication
 on:
   push:
     branches:
-      - main # Triggers on direct pushes to the main branch
+      - 'main' # Triggers on direct pushes to the main branch
+      - 'release-*' # Triggers on direct pushes to the release branch
 
 permissions:
    id-token: write # This is required for requesting the JWT
@@ -39,4 +40,4 @@ jobs:
       - name: Push to Code Commit
         run: |
           git remote add codecommit codecommit::us-west-2://private-sagemaker-training-adapter-for-nemo-staging
-          git push codecommit HEAD:main --force
+          git push codecommit HEAD:${{ github.ref_name }} --force
