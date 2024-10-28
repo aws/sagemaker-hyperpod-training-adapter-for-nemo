@@ -2,7 +2,6 @@ import os
 import shutil
 from copy import deepcopy
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import pytorch_lightning as pl
@@ -135,14 +134,12 @@ class TestResilienceCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     @pytest.mark.parametrize(
         "model_type",
-        [
-            # ("llama"),
-            ("mistral"),
-            #  ("mixtral")
-        ],
+        [("llama"), ("mistral"), ("mixtral")],
     )
     def test_resilience_save_and_load(self, model_type, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
         config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -150,6 +147,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
         sample = self.generate_sample(config)
 
+        self.reset_state_and_groups(ports[0])
         trainer, data_module, model_module, old_outputs = self.create_and_fit(
             config, model_type=model_type, sample=sample
         )
@@ -170,6 +168,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
         # Create a new trainer and load the checkpoint
         # No checkpoint path needs to be set during loading, as it should auto resume.
+        self.reset_state_and_groups(ports[1])
         logging.info("Creating a new trainer and loading the checkpoint")
         trainer, data_module, model_module, new_outputs = self.create_and_fit(
             config, model_type=model_type, sample=sample
@@ -183,12 +182,15 @@ class TestResilienceCheckpoint(TestCheckpoint):
 
     @skip_if_lt_x_gpu(8)
     def test_resilience_interval(self, temp_dir):
-
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
 
+        self.reset_state_and_groups(ports[1])
         # Set up for resilience checkpoint with dynamic interval
         config.trainer.max_steps = 16
         config.exp_manager.auto_checkpoint.warmup_steps = 4
@@ -226,7 +228,9 @@ class TestResilienceCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     def test_load_with_corrupted_checkpoint(self, temp_dir):
         """Simulate one node fails."""
-
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -244,6 +248,7 @@ class TestResilienceCheckpoint(TestCheckpoint):
         dist.barrier()
         del trainer, data_module, model_module
 
+        self.reset_state_and_groups(ports[1])
         # After removing, the latest_checkpoint will be skipped, and loaded the next one. In this case,
         # it is from .../local/0/ which is saved at global_step 1, the state_dict is retrieved by
         # state_dict_retriever
@@ -261,7 +266,9 @@ class TestResilienceCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     def test_slow_write_checkpoint(self, temp_dir):
         """Simulate if one of the checkpoint is behind."""
-
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -279,6 +286,8 @@ class TestResilienceCheckpoint(TestCheckpoint):
             modify_path = Path(modify_path)
             SageMakerLocalCheckpointIO.write_local_metadata(1, storage_writer)
         dist.barrier()
+
+        self.reset_state_and_groups(ports[1])
         # After modifying, the latest_checkpoint will be skipped, and loaded the next one. In this case,
         # it is from .../local/0/ which is saved at global_step 1, the state_dict is retrieved by
         # state_dict_retriever
@@ -296,6 +305,9 @@ class TestResilienceCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     def test_resilience_max_save(self, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -311,23 +323,33 @@ class TestResilienceCheckpoint(TestCheckpoint):
             len(list(os.scandir(os.path.join(config.exp_manager.checkpoint_dir, "local"))))
             == trainer.checkpoint_callback.save_top_k
         )
+        dist.barrier()
 
     @skip_if_lt_x_gpu(8)
-    @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
-    def test_resilience_save_calls(self, mock_save, temp_dir):
+    def test_resilience_save_calls(self, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.LOCAL)
-        config.trainer.max_steps = 10
+        config.trainer.max_steps = 7
         config.exp_manager.auto_checkpoint.warmup_steps = 3
         config.exp_manager.auto_checkpoint.drop_n_warmup_steps = 2
 
-        self.create_and_fit(
+        trainer, _, _, _ = self.create_and_fit(
             config,
         )
         assert (
-            mock_save.call_count
-            == config.exp_manager.auto_checkpoint.warmup_steps + config.exp_manager.auto_checkpoint.drop_n_warmup_steps
+            len(trainer.checkpoint_callback._interval_decision_maker.ckpt_io_durations)
+            == config.exp_manager.auto_checkpoint.warmup_steps
         )
+        assert (
+            len(trainer.checkpoint_callback._interval_decision_maker.step_durations)
+            == config.trainer.max_steps
+            - config.exp_manager.auto_checkpoint.warmup_steps
+            - config.exp_manager.auto_checkpoint.drop_n_warmup_steps
+        )
+        dist.barrier()

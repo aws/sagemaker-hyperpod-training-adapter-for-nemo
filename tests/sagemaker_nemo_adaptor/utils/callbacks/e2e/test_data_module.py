@@ -35,7 +35,7 @@ class DummyTestDataModuleTest(DummyDataModule):
     def train_dataloader(self):
         vocab_size = 1024 if self.cfg.model.get("vocab_size", None) is None else self.cfg.model.vocab_size
         self._train_ds = DummyTestDataset(vocab_size=vocab_size, seqlen=self.cfg.model.max_context_width)
-        return self._build_dataloader(self._train_ds)
+        return self._build_dataloader(self._train_ds, batch_size=self.cfg.model.train_batch_size)
 
 
 class BatchRetriever(Callback):
@@ -70,6 +70,7 @@ class TestDataModule(TestCheckpoint):
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
+        config.model.vocab_size = 256
         self.update_checkpoint_config_with_type(config, checkpoint_type)
         config.trainer.max_steps = 7
 
@@ -111,7 +112,6 @@ class TestDataModule(TestCheckpoint):
         trainer.callbacks.append(batch_retriever)
         trainer.fit(model_module, datamodule=test_data_module)
         new_batch = batch_retriever.last_step_batch
-
         # Compare the fetched batch data at the last step between two runs..
         assert_state_dict_equal(old_batch, new_batch)
         dist.barrier()

@@ -7,6 +7,7 @@ import torch.sagemaker.distributed.checkpoint.state_dict_saver as saver
 from lightning.fabric.utilities.cloud_io import get_filesystem
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
+from torch.sagemaker.distributed.checkpoint.async_utils import AsyncCallsQueue
 from torch.sagemaker.distributed.checkpoint.filesystem import (
     DistributedFileSystemWriter,
 )
@@ -19,6 +20,7 @@ from sagemaker_nemo_adaptor.utils.callbacks.base_ckpt_io import (
 class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        self.queue = AsyncCallsQueue()
 
     def save_checkpoint(
         self,
@@ -29,7 +31,8 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
         group = self.app_state.fsdp_process_group
-        saver.maybe_finalize_async_calls(blocking=True, process_group=group)
+        self.queue.maybe_finalize_async_calls(blocking=True, process_group=group)
+
         if self.app_state.is_fsdp_action_rank:
             storage_writer = DistributedFileSystemWriter(path)
             saver.async_save(
@@ -37,6 +40,7 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
                 storage_writer=storage_writer,
                 process_group=self.app_state.fsdp_process_group,
                 coordinator_rank=self.app_state.fsdp_coordinator_rank,
+                queue=self.queue,
                 force_check_all_plans=False,
                 wait_error_handling=False,
             )
@@ -69,4 +73,4 @@ class SageMakerShardedCheckpointIO(SageMakerBaseCheckpointIO):
             logging.info(f"Removed checkpoint: {path}")
 
     def teardown(self):
-        saver.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)
+        self.queue.maybe_finalize_async_calls(blocking=True, process_group=self.app_state.fsdp_process_group)

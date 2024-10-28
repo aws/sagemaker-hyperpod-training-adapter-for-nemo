@@ -39,6 +39,9 @@ class TestLRSchedulder(TestCheckpoint):
         lr scheduler latest lr will be retrieved and next step lr will be computed.
         """
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -51,6 +54,7 @@ class TestLRSchedulder(TestCheckpoint):
         del trainer, data_module, model_module
 
         # Create a new trainer and load the checkpoint
+        self.reset_state_and_groups(ports[1])
         logging.info("Creating a new trainer and loading the checkpoint")
         if checkpoint_type == SageMakerCheckpointType.SHARDED:
             sharded_checkpoint_dir = os.path.join(config.exp_manager.checkpoint_dir, "sharded")

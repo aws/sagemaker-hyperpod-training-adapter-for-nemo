@@ -22,6 +22,8 @@ class TestShardedCheckpoint(TestCheckpoint):
     )
     def test_sharded_save_and_load(self, temp_dir, model_type):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
         config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -29,6 +31,7 @@ class TestShardedCheckpoint(TestCheckpoint):
 
         sample = self.generate_sample(config)
 
+        self.reset_state_and_groups(ports[0])
         trainer, data_module, model_module, old_outputs = self.create_and_fit(
             config, model_type=model_type, sample=sample
         )
@@ -55,6 +58,7 @@ class TestShardedCheckpoint(TestCheckpoint):
 
         del trainer, data_module, model_module
 
+        self.reset_state_and_groups(ports[1])
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
@@ -77,6 +81,9 @@ class TestShardedCheckpoint(TestCheckpoint):
     )
     def test_sharded_max_save(self, save_top_k, sharded_save_last, every_n_train_steps, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -101,6 +108,7 @@ class TestShardedCheckpoint(TestCheckpoint):
         if sharded_save_last:
             num_checkpoints_save += int(max_steps % every_n_train_steps > 0)
         assert len(list(os.scandir(sharded_checkpoint_dir))) == num_checkpoints_save
+        dist.barrier()
 
     @skip_if_lt_x_gpu(8)
     @pytest.mark.parametrize(
@@ -115,6 +123,9 @@ class TestShardedCheckpoint(TestCheckpoint):
     @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
     def test_sharded_save_calls(self, mock_save, max_steps, sharded_save_last, every_n_train_steps, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -132,3 +143,4 @@ class TestShardedCheckpoint(TestCheckpoint):
             expected_call_counts = 0
         self.create_and_fit(config)
         assert mock_save.call_count == expected_call_counts
+        dist.barrier()

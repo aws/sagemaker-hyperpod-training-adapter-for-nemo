@@ -21,6 +21,8 @@ class TestFullCheckpoint(TestCheckpoint):
         [("llama"), ("mistral"), ("mixtral")],
     )
     def test_full_save_and_load(self, temp_dir, model_type):
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
         # Config set up
         config = self.config(model_type=model_type)
         config.exp_manager.exp_dir = temp_dir
@@ -28,7 +30,7 @@ class TestFullCheckpoint(TestCheckpoint):
         self.update_checkpoint_config_with_type(config, SageMakerCheckpointType.FULL)
 
         sample = self.generate_sample(config)
-
+        self.reset_state_and_groups(ports[0])
         trainer, data_module, model_module, old_outputs = self.create_and_fit(
             config, model_type=model_type, sample=sample
         )
@@ -54,6 +56,7 @@ class TestFullCheckpoint(TestCheckpoint):
 
         del trainer, data_module, model_module
 
+        self.reset_state_and_groups(ports[1])
         # Create a new trainer and load the checkpoint
         # A save full checkpoint can be only loaded through config.model.hf_model_name_or_path
         # Since in full mode, we don't save global step after reaching max_steps, we will need
@@ -84,6 +87,9 @@ class TestFullCheckpoint(TestCheckpoint):
     )
     def test_full_max_save(self, save_full_last, every_n_train_steps, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -105,6 +111,7 @@ class TestFullCheckpoint(TestCheckpoint):
         if save_full_last:
             num_checkpoints_save += int(max_steps % every_n_train_steps > 0)
         assert len(list(os.scandir(full_checkpoint_dir))) == num_checkpoints_save
+        dist.barrier()
 
     @skip_if_lt_x_gpu(8)
     @pytest.mark.parametrize(
@@ -118,6 +125,9 @@ class TestFullCheckpoint(TestCheckpoint):
     @patch("sagemaker_nemo_adaptor.utils.callbacks.checkpoint.SageMakerModelCheckpointBase._save")
     def test_full_save_calls(self, mock_save, max_steps, save_full_last, every_n_train_steps, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -132,3 +142,5 @@ class TestFullCheckpoint(TestCheckpoint):
             expected_call_counts += 1
         self.create_and_fit(config)
         assert mock_save.call_count == expected_call_counts
+
+        dist.barrier()

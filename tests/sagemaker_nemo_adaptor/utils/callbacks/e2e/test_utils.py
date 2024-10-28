@@ -1,5 +1,6 @@
 import os
 import shutil
+import socket
 from dataclasses import dataclass
 from functools import wraps
 from typing import Dict, Union
@@ -8,6 +9,7 @@ import hydra
 import pytest
 import torch
 import torch.distributed as dist
+import torch.sagemaker as tsm
 from hydra import initialize
 from nemo.utils import logging
 from omegaconf import DictConfig
@@ -112,15 +114,25 @@ def setup_test_cfg(cfg: DictConfig):
     cfg.model.max_position_embeddings = 8
     cfg.model.num_hidden_layers = 2
     cfg.model.vocab_size = 32
+    cfg.model.hidden_size = 8
+    cfg.model.num_attention_heads = 2
+    cfg.model.intermediate_size = 8
+    cfg.model.num_heads = 2
 
-    if cfg.model.model_type != "mistral":
-        cfg.model.hidden_width = 8
-        cfg.model.num_heads = 2
-        cfg.model.intermediate_size = 8
+    if not cfg.model.get("rope_scaling", None):
+        cfg.model.rope_scaling.original_max_position_embeddings = 8
+        if cfg.model.rope_scaling.get("rope_type", None):
+            cfg.model.rope_scaling.rope_type = "default"
+
+    if cfg.model.model_type == "mistral":
+        cfg.model.num_attention_heads = 1
+        cfg.model.sliding_window = 8
+        cfg.model.num_key_value_heads = 1
 
     cfg.model.shard_degree = _WORLD_SIZE
     if cfg.model.model_type == "mixtral":
         cfg.model.num_key_value_heads = 1
+        cfg.model.rope_scaling.rope_type = "default"
 
     if cfg.use_smp:
         cfg.model.tensor_model_parallel_degree = 1
@@ -391,3 +403,55 @@ class TestCheckpoint:
             trainer.strategy.checkpoint_io.checkpoint_type = checkpoint_type
             state_dicts.append(trainer._checkpoint_connector.dump_checkpoint())
         return state_dicts
+
+    def reset_state_and_groups(self, port):
+        """ "Reset the tsm state since shard degrees and world_size will be changing."""
+        # Use a different address and port, since resuing the same
+        # address and port will cause the NCCL to hang
+        old_address = os.environ.get("MASTER_ADDR", "127.0.0.1")
+
+        old_addresses = old_address.split(".")
+        old_addresses[-1] = str(int(old_addresses[-1]) + 1)
+        os.environ["MASTER_ADDR"] = ".".join(old_addresses)
+        os.environ["MASTER_PORT"] = str(port)
+
+        if not tsm.is_initialized() or not dist.is_initialized():
+            return
+        tsm.state.reset()
+        dist.barrier()
+        dist.destroy_process_group()
+
+    def find_free_network_ports(self):
+        """Finds two free port on localhost.
+
+        It is useful in single-node training when we don't want to connect to a real main node but have to set the
+        `MASTER_PORT` environment variable.
+
+        """
+
+        def find_port():
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(("", 0))
+            port = s.getsockname()[1]
+            s.close()
+            return port
+
+        # we will need to find two ports.
+        ports = set()
+        while len(ports) < 2:
+            ports.add(find_port())
+        return list(ports)
+
+    def broadcast_ports(self, ports):
+        ports = self.find_free_network_ports()
+        # broadcast to the other ranks from rank 0
+        if dist.get_rank() == 0:
+            p = ports
+        else:
+            p = []
+        object_list = [p]
+
+        # Broadcast ports from rank 0 to all the other ranks
+        dist.broadcast_object_list(object_list)
+        ports = object_list[0]
+        return ports

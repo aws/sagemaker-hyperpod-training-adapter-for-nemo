@@ -104,6 +104,7 @@ class TestSageMakerPeftShardedCheckpointIO(TestSageMakerShardedCheckpointIO):
             storage_writer=mock_storage_writer.return_value,
             process_group=checkpoint_io.app_state.fsdp_process_group,
             coordinator_rank=checkpoint_io.app_state.fsdp_coordinator_rank,
+            queue=checkpoint_io.queue,
             force_check_all_plans=False,
             wait_error_handling=False,
         )
@@ -132,7 +133,7 @@ class TestSageMakerPeftShardedCheckpointIO(TestSageMakerShardedCheckpointIO):
     def test_remove_checkpoint(self, checkpoint_io, temp_dir):
         super().test_remove_checkpoint(checkpoint_io, temp_dir)
 
-    @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.saver.maybe_finalize_async_calls")
+    @patch("sagemaker_nemo_adaptor.utils.callbacks.sharded_ckpt_io.AsyncCallsQueue.maybe_finalize_async_calls")
     def test_teardown(self, mock_finalize_async_calls, checkpoint_io):
         checkpoint_io.teardown()
         mock_finalize_async_calls.assert_called_once_with(

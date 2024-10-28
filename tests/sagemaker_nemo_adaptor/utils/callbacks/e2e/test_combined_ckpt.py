@@ -30,6 +30,9 @@ class TestCombinedCheckpoint(TestCheckpoint):
     @skip_if_lt_x_gpu(8)
     def test_combined_save_and_load(self, temp_dir):
         # Config set up
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
+        self.reset_state_and_groups(ports[0])
         config = self.config()
         config.exp_manager.exp_dir = temp_dir
         config.exp_manager.checkpoint_dir = os.path.join(temp_dir, "checkpoints")
@@ -75,6 +78,7 @@ class TestCombinedCheckpoint(TestCheckpoint):
         assert "config.json" in [v.name for v in all_files]
 
         # Stop training and further
+        self.reset_state_and_groups(ports[1])
         logging.info("Creating a new trainer and loading the checkpoint")
         trainer, data_module, model_module, new_outputs = self.create_and_fit(config)
         new_state_dict = self.retrieve_state_dicts(trainer, checkpoint_types=[SageMakerCheckpointType.SHARDED])[0]
