@@ -36,4 +36,9 @@ setup(
     install_requires=parse_requirements("requirements.txt"),
     extras_require=extra_requirements(),
     python_requires=">= 3.10",
+    entry_points={
+        "console_scripts": [
+            "merge-peft-checkpoint = sagemaker_nemo_adaptor.scripts.merge_peft_checkpoint:main",
+        ],
+    },
 )
