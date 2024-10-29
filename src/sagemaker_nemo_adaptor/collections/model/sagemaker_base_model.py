@@ -292,9 +292,14 @@ class SageMakerNLPBaseModel(ModelPT):
         _logger.info("Loading pretrained weights from %s.", path)
         use_flash_attn = self._cfg.use_flash_attention
         attn = "flash_attention_2"
+        access_token = self._cfg.get("hf_access_token", None)
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_pretrained(
-                path, config=model_cfg, torch_dtype=torch_dtype, quantization_config=quantization_config
+                path,
+                config=model_cfg,
+                torch_dtype=torch_dtype,
+                quantization_config=quantization_config,
+                token=access_token,
             )
         return AutoModelForCausalLM.from_pretrained(
             path,
@@ -302,6 +307,7 @@ class SageMakerNLPBaseModel(ModelPT):
             config=model_cfg,
             torch_dtype=torch_dtype,
             quantization_config=quantization_config,
+            token=access_token,
         )
 
     def _build_model(self, model_cfg):

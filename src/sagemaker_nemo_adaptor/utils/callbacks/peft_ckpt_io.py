@@ -58,6 +58,7 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
     def _merge_and_upload_peft_model(self, trainer: "pl.Trainer", checkpoint_dir: str, upload_to_storage=True):
         """Merge adapter weights with base model and upload final model"""
         hf_model_name_or_path = trainer.strategy.cfg.model.get("hf_model_name_or_path", None)
+        access_token = trainer.strategy.cfg.model.get("hf_access_token", None)
         if hf_model_name_or_path is None:
             logging.warning("No pretrained model name or path found, could not upload final model.")
             return
@@ -77,6 +78,7 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
             torch_dtype="auto",
             use_cache=False,
             device_map="cpu",
+            token=access_token,
         )
         if is_patched:
             patch_llama_flash_attn_cp.apply_patch()
