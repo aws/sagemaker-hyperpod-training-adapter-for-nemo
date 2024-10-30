@@ -40,9 +40,44 @@ jobs:
             }
             await checkAlerts();
 
+  check-code-scanning-alerts:
+    runs-on: ubuntu-latest
+    outputs:
+      code_scanning_alert_status: ${{ steps.check-code-scanning-alerts.outputs.code_scanning_alert_status }}
+    steps:
+      - name: Check for security alerts for public repository
+        id: check-code-scanning-alerts
+        if: github.event.repository.visibility == 'public'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          github-token: ${{ secrets.GH_PAT }}
+          script: |
+            async function checkAlerts() {
+              const owner = '${{ github.repository_owner }}';
+              const repo = '${{ github.event.repository.name }}';
+              const ref = 'refs/heads/main';
+
+              const codeScanningAlerts = await github.rest.codeScanning.listAlertsForRepo({
+                owner,
+                repo,
+                ref: ref
+              });
+              const activeCodeScanningAlerts = codeScanningAlerts.data.filter(alert => alert.state === 'open');
+              return activeCodeScanningAlerts.length > 0 ? '1': '0';
+            }
+            await checkAlerts();
+      - name: Set code scanning alerts output
+        id: set-code-scanning-alerts-output
+        run: |
+          if ${{ github.event.repository.visibility == 'public' }}; then
+            echo "code_scanning_alert_status=${{ steps.check-code-scanning-alerts.outputs.result }}" >> $GITHUB_OUTPUT
+          else
+            echo "code_scanning_alert_status=0" >> $GITHUB_OUTPUT
+          fi
+
   put-metric-data:
     runs-on: ubuntu-latest
-    needs: [check-dependabot-alerts]
+    needs: [check-dependabot-alerts, check-code-scanning-alerts]
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@12e3392609eaaceb7ae6191b3f54bbcb85b5002b
@@ -55,4 +90,11 @@ jobs:
             aws cloudwatch put-metric-data --metric-name DependabotAlert --namespace SecurityMonitoringMetrics --value 1 --unit Count --dimensions ProjectName=sagemaker-hyperpod-training-adapter-for-nemo
           else
             aws cloudwatch put-metric-data --metric-name DependabotAlert --namespace SecurityMonitoringMetrics --value 0 --unit Count --dimensions ProjectName=sagemaker-hyperpod-training-adapter-for-nemo
+          fi
+      - name: Put Code Scanning Alert Metric Data
+        run: |
+          if [ "${{ needs.check-code-scanning-alerts.outputs.code_scanning_alert_status }}" == "1" ]; then
+            aws cloudwatch put-metric-data --metric-name CodeScanningAlert --namespace SecurityMonitoringMetrics --value 1 --unit Count --dimensions ProjectName=sagemaker-hyperpod-training-adapter-for-nemo
+          else
+            aws cloudwatch put-metric-data --metric-name CodeScanningAlert --namespace SecurityMonitoringMetrics --value 0 --unit Count --dimensions ProjectName=sagemaker-hyperpod-training-adapter-for-nemo
           fi
