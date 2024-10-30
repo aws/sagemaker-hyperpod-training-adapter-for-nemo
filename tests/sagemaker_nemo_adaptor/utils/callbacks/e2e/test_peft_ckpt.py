@@ -83,6 +83,8 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         [("lora"), ("qlora_4bit")],
     )
     def test_peft_sharded_save_and_load(self, temp_dir, peft_type):
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
         # Save full checkpoint to be used as the base model for PEFT
         pretrained_path = self.run_full_save(temp_dir)
         # Config set up
@@ -96,6 +98,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
         # Turn on fine tuning
         config.model.do_finetune = True
 
+        self.reset_state_and_groups(ports[0])
         trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_SHARDED
         old_state_dict = trainer._checkpoint_connector.dump_checkpoint(weights_only=False)
@@ -123,6 +126,7 @@ class TestPeftShardedCheckpoint(TestPeftCheckpoint):
 
         del trainer, data_module, model_module
 
+        self.reset_state_and_groups(ports[1])
         # Create a new trainer and load the checkpoint
         config.exp_manager.resume_from_checkpoint = lastest_checkpoint.path
         logging.info("Creating a new trainer and loading the checkpoint")
@@ -147,6 +151,8 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
         [("lora"), ("qlora_4bit")],
     )
     def test_peft_full_save_and_load(self, temp_dir, peft_type):
+        ports = self.find_free_network_ports()
+        ports = self.broadcast_ports(ports)
         # Save full checkpoint to be used as the base model for PEFT
         pretrained_path = self.run_full_save(temp_dir)
 
@@ -161,6 +167,7 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
         # Turn on fine tuning
         config.model.do_finetune = True
 
+        self.reset_state_and_groups(ports[0])
         trainer, data_module, model_module, _ = self.create_and_fit(config, model_type="llama_lora")
         trainer.strategy.checkpoint_io.checkpoint_type = SageMakerCheckpointType.PEFT_FULL
 
@@ -203,6 +210,7 @@ class TestPeftFullCheckpoint(TestPeftCheckpoint):
 
         del trainer, data_module, model_module
 
+        self.reset_state_and_groups(ports[1])
         # Create a new trainer and load the full checkpoint
         # Set up non peft config to load in the full checkpoint
         config.model.peft.peft_type = None
