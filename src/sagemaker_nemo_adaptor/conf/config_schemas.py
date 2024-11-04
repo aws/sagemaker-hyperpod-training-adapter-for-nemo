@@ -133,8 +133,8 @@ class BaseModelDataConfig(BaseModel):
     @model_validator(mode="after")
     def before_model_validations(self) -> "BaseModelDataConfig":
         if not self.use_synthetic_data:
-            if not (self.train_dir and self.val_dir):
-                raise ValueError("'train_dir' and 'val_dir' are required since model is not using Synthetic Data")
+            if not self.train_dir:
+                raise ValueError("'train_dir' is required since model is not using Synthetic Data")
 
         return self
 

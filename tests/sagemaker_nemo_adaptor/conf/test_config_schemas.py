@@ -154,7 +154,7 @@ class Test_BaseModelDataConfig:
 
     def test_before_model_validation(self):
         config = self.build_config(use_synthetic_data=False)
-        del config["val_dir"]
+        del config["train_dir"]
 
         with pytest.raises(ValueError) as e:
             BaseModelDataConfig.model_validate(config)
