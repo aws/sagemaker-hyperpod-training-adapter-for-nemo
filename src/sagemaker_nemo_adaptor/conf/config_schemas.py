@@ -378,6 +378,7 @@ class BaseExportFullModelConfig(BaseModel):
 class BaseExpManager(BaseModel):
     exp_dir: str = "/fsx/exp/"
     name: str = "my_experiment"
+    explicit_log_dir: Optional[str] = None
     create_tensorboard_logger: bool = True
     create_checkpoint_callback: bool = True
     checkpoint_callback_params: BaseCheckpointCallbackConfig = Field(default_factory=BaseCheckpointCallbackConfig)
