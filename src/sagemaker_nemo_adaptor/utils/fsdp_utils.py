@@ -120,10 +120,6 @@ def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
 
         # TODO: Add support for Block
         transformer_layer = ParallelBlock
-    elif model_type == "rubik_gpt_neox":
-        from smpv1.transformer import DistributedTransformerLayer
-
-        transformer_layer = DistributedTransformerLayer
     elif model_type == "llama_v2" or model_type == "llama_v3":
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 

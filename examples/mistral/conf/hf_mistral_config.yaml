@@ -31,7 +31,7 @@ exp_manager:
     every_n_train_steps: 0
     save_last: False
 
-use_smp: False #enable Rubik
+use_smp: False #enable SMP
 distributed_backend: nccl
 
 
@@ -85,7 +85,6 @@ model:
 
   # finetune
   do_finetune: False
-  # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
   hf_model_name_or_path: null
 
   precision: ${trainer.precision}

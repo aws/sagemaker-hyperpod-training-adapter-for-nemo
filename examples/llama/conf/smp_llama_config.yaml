@@ -30,7 +30,7 @@ exp_manager:
     every_n_train_steps: 0
     save_last: False
 
-use_smp: True #enable Rubik
+use_smp: True #enable SMP
 distributed_backend: nccl
 
 
@@ -89,8 +89,7 @@ model:
   fp8_amax_compute_algo: max
 
   do_finetune: False
-  # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
-  hf_model_name_or_path: null # "/fsx/hf_pretrained_models/Meta-Llama-3-8B"
+  hf_model_name_or_path: null
 
   precision: ${trainer.precision}
 

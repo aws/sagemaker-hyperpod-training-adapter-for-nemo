@@ -252,7 +252,6 @@ class BaseModelConfig(BaseModel):
 
     # Fine-Tuning
     do_finetune: bool = True
-    # Rubik calls it `pretrained_model_weights` but we opted to follow the name used by HF
     hf_model_name_or_path: Optional[str] = None
     hf_access_token: Optional[str] = None
 
@@ -260,7 +259,7 @@ class BaseModelConfig(BaseModel):
 
     lr_decay_iters: int = Field(default=47683, ge=1)
 
-    log_reduced_training_loss: bool = True  # Rubik has False
+    log_reduced_training_loss: bool = True
 
     # CHILD CONFIGS
     optim: BaseModelOptimizerConfig = Field(default_factory=BaseModelOptimizerConfig)

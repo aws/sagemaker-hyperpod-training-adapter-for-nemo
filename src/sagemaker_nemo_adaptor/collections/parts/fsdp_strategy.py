@@ -229,7 +229,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         return param_init_fn, None, nullcontext()
 
     def _setup_smp_delayed_param(self, cfg, model):
-        # https://gitlab.aws.dev/rubik/sm-pytorch/-/blob/sm-main/torch/sagemaker/patches/patch_manager.py#L85
         # The monkey patch is applied during tsm.init(). This is the make sure the correct import
         # is called. ie: RotaryPositionEmbedding will become PatchedRotaryPositionEmbedding.
         from torch.sagemaker.delayed_param import DelayedParamIniter

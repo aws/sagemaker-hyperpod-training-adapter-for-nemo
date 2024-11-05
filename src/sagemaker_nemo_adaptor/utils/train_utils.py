@@ -111,7 +111,7 @@ def apply_activation_checkpoint_moe(model=None, checkpoint_attn=True, checkpoint
 
 
 def get_batch_for_cp_rank(batch):
-    # TODO: 1. work with rubik to get the final one
+    # TODO: 1. work with SMP to get the final one
     # TODO: 2. add license
     # Based on https://tiny.amazon.com/1bcmbuhje/githNVIDNeMoblob58d6nemocoll
     cp_size = tsm.state.cp_size
