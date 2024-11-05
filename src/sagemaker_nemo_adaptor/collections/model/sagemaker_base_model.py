@@ -48,11 +48,11 @@ class SageMakerNLPBaseModel(ModelPT):
     # All subclass should set this to True
     predefined_model = False
 
-    def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp=True):
+    def __init__(self, cfg: DictConfig, trainer: Trainer, use_smp_model=True):
         self.grad_norm = None
         self._cfg = cfg
         self.model = None
-        self.use_smp = use_smp
+        self.use_smp_model = use_smp_model
         self.model_config = None
 
         self.val_loss = 0
@@ -118,13 +118,13 @@ class SageMakerNLPBaseModel(ModelPT):
     def do_patch_attn_context_parallel(self):
         # support non-SMP context parallel usage.
         # this is mostly for llama 405b QLoRA CP.
-        return not self.use_smp and self._cfg.get("context_parallel_degree", 1) > 1
+        return not self.use_smp_model and self._cfg.get("context_parallel_degree", 1) > 1
 
     def setup(self, *a, **kw):
         if self.do_patch_attn_context_parallel:
             patch_llama_flash_attn_cp.apply_patch()
         if not self.predefined_model:
-            assert not self.use_smp, "model that is not predefined can not support use_smp=True"
+            assert not self.use_smp_model, "model that is not predefined can not support use_smp_model=True"
             assert (
                 self._cfg.get("hf_model_name_or_path", None) is not None
             ), "hf_model_name_or_path is required when the model is not predefined"
@@ -148,14 +148,14 @@ class SageMakerNLPBaseModel(ModelPT):
             # check that we are using patched attention for context parallel
             assert any(
                 [submodule.__module__ == "transformer_engine.pytorch.attention" for submodule in model.modules()]
-            ), "This model does not support context parallel with use_smp=False."
+            ), "This model does not support context parallel with use_smp_model=False."
             # setup TransformerEngine CP groups
             setup_transformer_engine_cp_groups(
                 model, get_global_ranks(tsm.state.cp_process_group), tsm.state.cp_process_group
             )
         if self.do_finetune_with_pretrained_weights:
             dist.barrier()
-        if self.use_smp:
+        if self.use_smp_model:
             self.model = self._transform(model)
         else:
             self.model = model
@@ -168,7 +168,7 @@ class SageMakerNLPBaseModel(ModelPT):
         return module.to_empty(device=torch.device("cuda"), recurse=False)
 
     def _fp8_delayed_scaling(self):
-        if self.use_smp and self._cfg.fp8:
+        if self.use_smp_model and self._cfg.fp8:
             return DelayedScaling(
                 fp8_format=Format.HYBRID,
                 amax_history_len=self._cfg.fp8_amax_history_len,
@@ -180,7 +180,7 @@ class SageMakerNLPBaseModel(ModelPT):
         load_state_dict_from_rank0 = self.do_finetune_with_pretrained_weights
         if self._cfg.moe:
             moe_config = MoEConfig(
-                smp_moe=self.use_smp,
+                smp_moe=self.use_smp_model,
                 random_seed=12345,
                 moe_load_balancing=self._cfg.moe_load_balancing,
                 global_token_shuffle=self._cfg.global_token_shuffle,
@@ -224,7 +224,7 @@ class SageMakerNLPBaseModel(ModelPT):
         return self._build_model(model_cfg)
 
     def _build_model_from_pretrain_peft(self, model_cfg):
-        assert not self.use_smp, "Must set use_smp=False to use PEFT"
+        assert not self.use_smp_model, "Must set use_smp_model=False to use PEFT"
         assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
         assert self._cfg.do_finetune, "Must set do_finetune=True to use PEFT"
         assert self._cfg.hf_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
@@ -350,7 +350,7 @@ class SageMakerNLPBaseModel(ModelPT):
         General training forward steps, backward/optimizer step will be done by
         PTL can also skip auto optimization with self.automatic_optimization=False
         """
-        if self.use_smp and self._cfg.fp8:
+        if self.use_smp_model and self._cfg.fp8:
             self.loss = self._training_step_fp8(batch, batch_idx, *a, **kw)
         else:
             self.loss = self._training_step(batch, batch_idx, *a, **kw)

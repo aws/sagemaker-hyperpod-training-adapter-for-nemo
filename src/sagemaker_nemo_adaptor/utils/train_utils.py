@@ -17,12 +17,12 @@ _logger = Logger().get_logger()
 def apply_activation_checkpoint(
     model=None,
     model_type=None,
-    use_smp: bool = True,
+    use_smp_model: bool = True,
     fp8: bool = False,
     moe: bool = False,
 ):
     """Apply activation checkpoint."""
-    if fp8 and moe and use_smp:
+    if fp8 and moe and use_smp_model:
         # Checkpoint attention and moe layers separately when using FP8 and MoE.
         # Currently, checkpointing entire TransformerLayer is not supported.
         apply_activation_checkpoint_moe(model=model)
@@ -34,12 +34,12 @@ def apply_activation_checkpoint(
         checkpoint_wrapper,
     )
 
-    transformer_layer = get_transformer_layer(model_type, use_smp, moe=moe)
+    transformer_layer = get_transformer_layer(model_type, use_smp_model, moe=moe)
     check_fn_gpt = lambda submodule: isinstance(  # pylint: disable=unnecessary-lambda-assignment
         submodule, transformer_layer
     )
 
-    if fp8 and use_smp:
+    if fp8 and use_smp_model:
         import transformer_engine
 
         checkpoint_fn = functools.partial(

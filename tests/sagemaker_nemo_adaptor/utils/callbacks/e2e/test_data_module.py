@@ -83,7 +83,7 @@ class TestDataModule(TestCheckpoint):
 
         # Create the trainer and use testdata module instead.
         trainer, _ = SageMakerTrainerBuilder(config).create_trainer()
-        model_module = SageMakerLlamaModel(config.model, trainer, use_smp=config.use_smp)
+        model_module = SageMakerLlamaModel(config.model, trainer, use_smp_model=config.use_smp_model)
         test_data_module = DummyTestDataModuleTest(config, trainer)
         batch_retriever = BatchRetriever()
         trainer.callbacks.append(batch_retriever)
@@ -106,7 +106,7 @@ class TestDataModule(TestCheckpoint):
 
         # Create another trainer and use testdata module instead.
         trainer, _ = SageMakerTrainerBuilder(config).create_trainer()
-        model_module = SageMakerLlamaModel(config.model, trainer, use_smp=config.use_smp)
+        model_module = SageMakerLlamaModel(config.model, trainer, use_smp_model=config.use_smp_model)
         test_data_module = DummyTestDataModuleTest(config, trainer)
         batch_retriever = BatchRetriever()
         trainer.callbacks.append(batch_retriever)

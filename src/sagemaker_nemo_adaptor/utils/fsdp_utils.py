@@ -82,9 +82,9 @@ def get_auto_wrap_policy(policy: str, transformer_layer=None, use_peft=False):
             )
 
 
-def get_transformer_layer(model_type="gpt2", use_smp=False, moe=False):
+def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
     """Get transformer layer."""
-    if use_smp:
+    if use_smp_model:
         # For pt-2.1-tsm-2.1 releases and below,
         # We can't checkpoint our transformer.TransformerLayer class as it takes a tuple as input,
         # so we checkpoint the te.TETransformerLayer directly instead.
@@ -144,7 +144,7 @@ def set_mixed_precision_recipe(
     precision: Union[int, str],
     grad_reduce_dtype: Union[int, str] = None,
     set_buffer_dtype: Union[int, str] = None,
-    use_smp: bool = True,
+    use_smp_model: bool = True,
     use_peft: bool = False,
 ) -> MixedPrecision:
     """
@@ -174,7 +174,7 @@ def set_mixed_precision_recipe(
     if set_buffer_dtype is not None:
         buffer_dtype = utils_funcs.torch_dtype_from_precision(set_buffer_dtype, None)
     else:
-        buffer_dtype = torch.float32 if use_smp else param_dtype
+        buffer_dtype = torch.float32 if use_smp_model else param_dtype
     return MixedPrecision(
         param_dtype=param_dtype,
         reduce_dtype=reduce_dtype,

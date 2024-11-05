@@ -42,7 +42,7 @@ def _validate_model_type(model_type: Optional[str], hf_model_name_or_path: Optio
 
     # Enums support the `in` operator starting with Python 3.12
     if model_type is not None and model_type not in [key.value for key in ModelType]:
-        msg = f'Model "{model_type}" is not supported by SageMaker Model Parallel. Please set `use_smp` to False'
+        msg = f'Model "{model_type}" is not supported by SageMaker Model Parallel. Please set `use_smp_model` to False'
         _logger.warning(msg)
 
 
@@ -68,7 +68,7 @@ def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config)
 
 
 def _validate_schema(cfg: DictConfig, extra="forbid") -> tuple[DictConfig, type[BaseModel]]:
-    SchemaValidator = get_model_validator(use_smp=cfg.use_smp, extra=extra)
+    SchemaValidator = get_model_validator(use_smp_model=cfg.use_smp_model, extra=extra)
     config_dict = OmegaConf.to_container(cfg, resolve=True)
     try:
         validated_model = SchemaValidator.model_validate(config_dict)

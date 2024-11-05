@@ -84,7 +84,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         **kwargs: Union[Any, Dict[str, Any]],
     ) -> None:
         self.cfg = cfg
-        self.use_smp = cfg.use_smp
+        self.use_smp_model = cfg.use_smp_model
         self.smp_config_dict = self._setup_smp_config(cfg)
         self.app_state = SageMakerAppState()
 
@@ -101,8 +101,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         smp_config = {
             "activation_loading_horizon": cfg.model.get("activation_loading_horizon", 2),
             "sm_activation_offloading": cfg.model.get("offload_activations", False),
-            # these parallel degrees are defined only when `use_smp=True`.
-            # defaulting to 1 for case when `use_smp=False`:
+            # these parallel degrees are defined only when `use_smp_model=True`.
+            # defaulting to 1 for case when `use_smp_model=False`:
             # https://tiny.amazon.com/ikqkw3kr/githawsprivblob1bf5srcsage
             "tensor_parallel_degree": cfg.model.get("tensor_model_parallel_degree", 1),
             "expert_parallel_degree": cfg.model.get("expert_model_parallel_degree", 1),
@@ -136,7 +136,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def _setup_model(self, model):
         # retrieve the root module name of the model which is the first one.
-        use_smp = self.use_smp
+        use_smp_model = self.use_smp_model
         cfg = self.cfg.model
         predefined_model = model.predefined_model
         if not predefined_model:
@@ -153,11 +153,11 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             fsdp_plugin.set_auto_wrap_policy(model.model)
             auto_wrap_policy = fsdp_plugin.auto_wrap_policy
         else:
-            transformer_layer = get_transformer_layer(cfg.model_type, use_smp, cfg.moe)
+            transformer_layer = get_transformer_layer(cfg.model_type, use_smp_model, cfg.moe)
             auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer, model.use_peft)
         mixed_precision_policy = set_mixed_precision_recipe(
             precision=cfg.precision,
-            use_smp=use_smp,
+            use_smp_model=use_smp_model,
             use_peft=model.use_peft,
         )
         sharding_strategy = get_sharding_strategy(cfg.sharding_strategy)
@@ -200,7 +200,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 apply_activation_checkpoint(
                     model=pytorch_model,
                     model_type=cfg.model_type,
-                    use_smp=use_smp,
+                    use_smp_model=use_smp_model,
                     fp8=cfg.fp8,
                     moe=cfg.moe,
                 )
@@ -215,7 +215,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
     def _setup_delayed_param(self, cfg, model):
         if not cfg.get("delayed_param", None):
             return None, None, nullcontext()
-        if self.use_smp:
+        if self.use_smp_model:
             return self._setup_smp_delayed_param(cfg, model)
         return self._setup_non_smp_delayed_param(cfg, model)
 
@@ -276,7 +276,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         tsm.init(self.smp_config_dict)
 
         # Setup nemo distributed variables, not actually initialize megatron distributed backend
-        tensor_parallel_degree = self.smp_config_dict["tensor_parallel_degree"] if self.use_smp else 1
+        tensor_parallel_degree = self.smp_config_dict["tensor_parallel_degree"] if self.use_smp_model else 1
         context_parallel_degree = self.cfg.model.get("context_parallel_degree", 1)
         initialize_model_parallel_for_nemo(
             world_size=self.world_size,

@@ -99,7 +99,7 @@ class SageMakerTrainerBuilder:
         if _IS_INTERACTIVE and self.cfg.trainer.devices == 1:
             raise NotImplementedError(f"Currently we don't support interactive mode in SM adaptor")
 
-        if self.cfg.use_smp or self.cfg.model.get("fsdp", True):
+        if self.cfg.use_smp_model or self.cfg.model.get("fsdp", True):
             # We're using FSDPStrategy for all SMP usecase for now
             return SageMakerFSDPStrategy(self.cfg)
         else:

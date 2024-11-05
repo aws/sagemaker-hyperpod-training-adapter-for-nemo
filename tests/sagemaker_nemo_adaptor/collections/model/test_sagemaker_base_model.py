@@ -22,11 +22,11 @@ UTILITY FUNCTIONS
 """
 
 
-def build_base_model(model_cfg: DictConfig = {}, trainer=None, use_smp=True):
+def build_base_model(model_cfg: DictConfig = {}, trainer=None, use_smp_model=True):
     if trainer is None:
         trainer = Trainer()
 
-    return SageMakerNLPBaseModel(model_cfg, trainer, use_smp)
+    return SageMakerNLPBaseModel(model_cfg, trainer, use_smp_model)
 
 
 """
@@ -163,7 +163,7 @@ class TestTrainingStep:
         def __init__(self):
             self.datamodule = NestedDotMap({"get_batch": None})
 
-    def test_fp8_and_use_smp(self, full_config, mocker):
+    def test_fp8_and_use_smp_model(self, full_config, mocker):
         fp8_autocast_mock = mocker.patch(MODULE_PATH + ".transformer_engine.pytorch.fp8_autocast")
         test_loss = 22
 
@@ -185,20 +185,20 @@ class TestTrainingStep:
         assert base.loss == test_loss
 
     @pytest.mark.parametrize(
-        ("fp8", "use_smp"),
+        ("fp8", "use_smp_model"),
         [
             [True, False],
             [False, True],
             [False, False],
         ],
     )
-    def test_no_fp8_and_use_smp(self, full_config, mocker, fp8, use_smp):
+    def test_no_fp8_and_use_smp_model(self, full_config, mocker, fp8, use_smp_model):
         fp8_autocast_mock = mocker.patch(MODULE_PATH + ".transformer_engine.pytorch.fp8_autocast")
         test_loss = 22
 
         # prepare
         full_config.model.fp8 = fp8
-        base = build_base_model(full_config.model, Trainer(), use_smp)
+        base = build_base_model(full_config.model, Trainer(), use_smp_model)
         base.trainer = TestTrainingStep.TrainerMock()
         base.trainer.datamodule.get_batch = mocker.Mock(return_value=[[], None, []])
         base.model = model_mock = mocker.Mock(return_value={"loss": test_loss})

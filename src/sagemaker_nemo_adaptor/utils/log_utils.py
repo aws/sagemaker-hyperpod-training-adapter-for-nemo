@@ -4,9 +4,9 @@ from typing import cast
 try:
     from torch.sagemaker.logger import get_logger
 
-    use_smp = True
+    use_smp_model = True
 except:
-    use_smp = False
+    use_smp_model = False
 
 
 class Logger:
@@ -18,7 +18,7 @@ class Logger:
     def __init__(self):
         self.logger = None
 
-        if use_smp:
+        if use_smp_model:
             self.logger = get_logger()
         else:
             _logger = logger.getLogger("smp")

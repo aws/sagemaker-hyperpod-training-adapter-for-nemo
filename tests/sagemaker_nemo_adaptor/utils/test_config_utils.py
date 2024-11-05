@@ -24,7 +24,7 @@ def sample_config():
             "do_finetune": False,
             "model_type": "value",
         },
-        "use_smp": True,
+        "use_smp_model": True,
         "distributed_backend": "nccl",
         "trainer": {},
     }
@@ -34,11 +34,11 @@ def sample_config():
 def test_get_model_validator(sample_config):
 
     # Test for valid smp model type
-    assert get_model_validator(sample_config.use_smp) == ConfigWithSMPForbid
+    assert get_model_validator(sample_config.use_smp_model) == ConfigWithSMPForbid
 
     # Test for valid hf model type
-    sample_config.use_smp = False
-    assert get_model_validator(sample_config.use_smp) == ConfigForbid
+    sample_config.use_smp_model = False
+    assert get_model_validator(sample_config.use_smp_model) == ConfigForbid
 
 
 def test_validate_custom_recipe_extra_params(sample_config):

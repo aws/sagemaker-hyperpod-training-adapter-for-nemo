@@ -41,16 +41,16 @@ def create_dynamic_model(base_model_cls, extra: str = "forbid"):
     return DynamicModelConfig
 
 
-def get_model_validator(use_smp, extra="forbid") -> type[BaseModel]:
+def get_model_validator(use_smp_model, extra="forbid") -> type[BaseModel]:
     global smp
-    smp = use_smp
+    smp = use_smp_model
     if extra == "forbid":
-        if use_smp:
+        if use_smp_model:
             return ConfigWithSMPForbid
         else:
             return ConfigForbid
     elif extra == "allow":
-        if use_smp:
+        if use_smp_model:
             return ConfigWithSMPAllow
         else:
             return ConfigAllow
@@ -397,7 +397,7 @@ class BaseConfig(BaseModel):
     # Only disable extra args for slurm workflow
     model_config = ConfigDict(extra="forbid" if is_slurm_run() else "allow")
     name: list[str] = ["hf_llama_8b"]
-    use_smp: bool = True
+    use_smp_model: bool = True
     distributed_backend: Literal["smddp", "nccl"]
     log_perf_metrics: bool = False
 

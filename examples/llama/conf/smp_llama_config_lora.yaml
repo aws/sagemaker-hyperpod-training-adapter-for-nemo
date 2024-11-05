@@ -31,7 +31,7 @@ exp_manager:
     every_n_train_steps: 0
     save_last: False
 
-use_smp: False #disabable SMP
+use_smp_model: False #disabable SMP
 distributed_backend: nccl
 
 

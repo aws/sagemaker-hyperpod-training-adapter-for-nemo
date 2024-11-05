@@ -19,7 +19,7 @@ def train(cfg: DictConfig) -> None:
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
     exp_manager(trainer, cfg.exp_manager)
-    model_module = SageMakerNLPBaseModel(cfg.model, trainer, use_smp=cfg.use_smp)
+    model_module = SageMakerNLPBaseModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     trainer.fit(model_module, datamodule=data_module)
 
 

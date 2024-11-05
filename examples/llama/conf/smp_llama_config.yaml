@@ -30,7 +30,7 @@ exp_manager:
     every_n_train_steps: 0
     save_last: False
 
-use_smp: True #enable SMP
+use_smp_model: True #enable SMP
 distributed_backend: nccl
 
 

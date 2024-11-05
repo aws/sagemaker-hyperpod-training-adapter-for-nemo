@@ -57,11 +57,11 @@ def test_get_transformer_layer():
     assert get_transformer_layer("mixtral").__name__ == "MixtralDecoderLayer"
     # Test for SMP with PT 2.2.0 and above
     with patch("torch.__version__", "2.2.0"):
-        assert get_transformer_layer("", use_smp=True) is not None
+        assert get_transformer_layer("", use_smp_model=True) is not None
 
     # Test for SMP with PT 2.1.0 and below
     with patch("torch.__version__", "2.1.0"):
-        assert get_transformer_layer("", use_smp=True) is not None
+        assert get_transformer_layer("", use_smp_model=True) is not None
 
     # Test for invalid model type
     with pytest.raises(Exception):

@@ -134,7 +134,7 @@ def setup_test_cfg(cfg: DictConfig):
         cfg.model.num_key_value_heads = 1
         cfg.model.rope_scaling.rope_type = "default"
 
-    if cfg.use_smp:
+    if cfg.use_smp_model:
         cfg.model.tensor_model_parallel_degree = 1
         cfg.model.expert_model_parallel_degree = 1
     cfg.model.do_finetune = False
@@ -202,7 +202,7 @@ class TestCheckpoint:
         trainer, data_module = SageMakerTrainerBuilder(config).create_trainer()
         exp_manager(trainer, config.exp_manager)
         sagemaker_model = SAGEMAKER_TEST_MODEL_FACTORY[model_type].model
-        model_module = sagemaker_model(config.model, trainer, use_smp=config.use_smp)
+        model_module = sagemaker_model(config.model, trainer, use_smp_model=config.use_smp_model)
         if callbacks:
             if not isinstance(callbacks, list):
                 callbacks = [callbacks]
