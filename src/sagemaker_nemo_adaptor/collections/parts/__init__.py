@@ -1,3 +1,2 @@
-from .ddp_strategy import SageMakerDDPStrategy
 from .fsdp_strategy import SageMakerFSDPStrategy
 from .sagemaker_trainer_builder import SageMakerTrainerBuilder

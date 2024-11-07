@@ -1,7 +1,6 @@
 import logging
 import os
 import sys
-from typing import Union
 
 from nemo.lightning.pytorch.callbacks import NsysCallback
 from omegaconf import DictConfig, OmegaConf
@@ -11,10 +10,7 @@ from sagemaker_nemo_adaptor.collections.data import (
     DummyDataModule,
     HuggingFaceDataModule,
 )
-from sagemaker_nemo_adaptor.collections.parts import (
-    SageMakerDDPStrategy,
-    SageMakerFSDPStrategy,
-)
+from sagemaker_nemo_adaptor.collections.parts import SageMakerFSDPStrategy
 
 try:
     from sagemaker_nemo_adaptor.utils.callbacks.checkpoint import (
@@ -89,9 +85,9 @@ class SageMakerTrainerBuilder:
         if self.tracer:
             self.tracer.start()
 
-    def _training_strategy(self) -> Union[SageMakerDDPStrategy, SageMakerFSDPStrategy]:
+    def _training_strategy(self) -> SageMakerFSDPStrategy:
         """
-        Returns a DDP or a FSDP strategy passed to Trainer.strategy.
+        Returns a FSDP strategy passed to Trainer.strategy.
         """
         # check interactive environment TODO: Currently not supporting interactive mode
         _IS_INTERACTIVE = hasattr(sys, "ps1") or bool(sys.flags.interactive)
@@ -103,7 +99,7 @@ class SageMakerTrainerBuilder:
             # We're using FSDPStrategy for all SMP usecase for now
             return SageMakerFSDPStrategy(self.cfg)
         else:
-            return SageMakerDDPStrategy(self.cfg)
+            raise NotImplementedError(f"Currently we only support FSDPStrategy")
 
     @property
     def use_generic_checkpoint(self):

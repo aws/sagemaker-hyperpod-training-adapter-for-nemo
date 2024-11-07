@@ -59,7 +59,10 @@ def test_exp_manager_valid_cfg(mock_trainer):
         "version": test_version,
         "use_datetime_version": False,
         "resume_if_exists": False,
-        "create_mlflow_logger": False,
+        "create_mlflow_logger": True,
+        "ema": {"enable": True},
+        "create_early_stopping_callback": True,
+        "max_time_per_run": "00:03:55:00",
     }
     with patch("sagemaker_nemo_adaptor.utils.get_rank.is_global_rank_zero", return_value=True):
         log_dir = exp_manager(mock_trainer, mock_cfg)

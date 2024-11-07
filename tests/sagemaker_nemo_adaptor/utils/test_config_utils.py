@@ -8,6 +8,7 @@ from sagemaker_nemo_adaptor.conf.config_schemas import (
     ConfigForbid,
     ConfigWithSMPForbid,
     get_model_validator,
+    validate_distributed_degrees,
 )
 from sagemaker_nemo_adaptor.constants import ModelType
 from sagemaker_nemo_adaptor.utils.config_utils import (
@@ -40,6 +41,34 @@ def test_get_model_validator(sample_config):
     sample_config.use_smp_model = False
     assert get_model_validator(sample_config.use_smp_model) == ConfigForbid
 
+    with pytest.raises(ValueError):
+        get_model_validator(sample_config.use_smp_model, extra="invalid")
+
+
+def test_validate_distributed_degrees():
+
+    # Test for invalid distributed degrees
+
+    # Test world_size % degree_mult > 0
+    with pytest.raises(ValueError):
+        validate_distributed_degrees(
+            shard_degree=2,
+            tensor_model_parallel_degree=8,
+            expert_model_parallel_degree=8,
+            context_parallel_degree=8,
+            num_nodes=1,
+        )
+
+    # CP degree > shard degree
+    with pytest.raises(ValueError):
+        validate_distributed_degrees(
+            shard_degree=1,
+            tensor_model_parallel_degree=8,
+            expert_model_parallel_degree=1,
+            context_parallel_degree=8,
+            num_nodes=1,
+        )
+
 
 def test_validate_custom_recipe_extra_params(sample_config):
     # Test for extra fields
@@ -56,3 +85,13 @@ def test_validate_schema(sample_config):
     # Test for valid schema
     sample_config.model.model_type = ModelType.LLAMA_V3.value
     _validate_schema(sample_config)
+
+
+def test_validate_model_type(sample_config):
+
+    # Test for invalid None values
+    with pytest.raises(AttributeError):
+        _validate_model_type(model_type=None, hf_model_name_or_path=None)
+
+    # Test for invalid model_type (should pass with warning)
+    _validate_model_type(model_type="fake_model_type", hf_model_name_or_path=None)

@@ -8,10 +8,11 @@ from typing import Dict, Optional, Union
 
 from nemo.collections.common.callbacks import EMA
 from nemo.utils import logging
-from nemo.utils.exp_manager import CallbackParams
+from nemo.utils.exp_manager import CallbackParams, EarlyStopping
 from nemo.utils.exp_manager import ExpManagerConfig as NeMoExpManagerConfig
 from nemo.utils.exp_manager import (
     StatelessTimer,
+    Timer,
     TimingCallback,
     configure_loggers,
     configure_no_restart_validation_training_loop,
@@ -200,10 +201,6 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
             every_n_steps=cfg.ema.every_n_steps,
         )
         trainer.callbacks.append(ema_callback)
-
-    if cfg.create_early_stopping_callback:
-        early_stop_callback = EarlyStopping(**cfg.early_stopping_callback_params)
-        trainer.callbacks.append(early_stop_callback)
 
     if cfg.create_early_stopping_callback:
         early_stop_callback = EarlyStopping(**cfg.early_stopping_callback_params)

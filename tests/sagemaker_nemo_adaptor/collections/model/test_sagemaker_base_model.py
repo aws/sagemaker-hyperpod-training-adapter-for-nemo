@@ -45,13 +45,13 @@ transformers_threshold_version = "4.37.1"
 transformers_below_version = "4.37.0"
 
 
-@pytest.mark.skip(reason="need refactor")
 class TestBuildModel:
     """build_model()"""
 
     transformers_threshold_version = "4.37.1"
     transformers_below_version = "4.37.0"
 
+    @pytest.mark.skip(reason="need refactor")
     @pytest.mark.parametrize(
         ("version", "exp_args_len", "exp_kwargs_len"),
         [
@@ -79,6 +79,7 @@ class TestBuildModel:
         assert len(kwargs) == exp_kwargs_len
         assert args[0] == full_config.model.hf_model_name_or_path
 
+    @pytest.mark.skip(reason="need refactor")
     def test_w_hf_model_name_or_path_and_no_flash_attention(self, full_config, mocker):
         from_pretrained_stub = mocker.stub()
         auto_model_mock, _ = self.get_test_mocks(mocker, self.transformers_threshold_version)
@@ -155,7 +156,6 @@ class TestBuildModel:
         return auto_model_mock, TF_VERSION_mock
 
 
-@pytest.mark.skip(reason="need refactor")
 class TestTrainingStep:
     """training_step()"""
 
@@ -163,6 +163,7 @@ class TestTrainingStep:
         def __init__(self):
             self.datamodule = NestedDotMap({"get_batch": None})
 
+    @pytest.mark.skip(reason="need refactor")
     def test_fp8_and_use_smp_model(self, full_config, mocker):
         fp8_autocast_mock = mocker.patch(MODULE_PATH + ".transformer_engine.pytorch.fp8_autocast")
         test_loss = 22
@@ -184,6 +185,7 @@ class TestTrainingStep:
         model_mock.assert_called_once()
         assert base.loss == test_loss
 
+    @pytest.mark.skip(reason="need refactor")
     @pytest.mark.parametrize(
         ("fp8", "use_smp_model"),
         [
@@ -213,7 +215,6 @@ class TestTrainingStep:
         assert base.loss == test_loss
 
 
-@pytest.mark.skip(reason="need refactor")
 class TestSetupOptimization:
     """setup_optimization()"""
 
@@ -275,6 +276,7 @@ class TestSetupOptimization:
         assert OmegaConf.to_container(kwargs["optim_config"]) == optimizer_with_max_steps
         assert kwargs["optim_kwargs"] == {}
 
+    @pytest.mark.skip(reason="need refactor")
     def test_on_train_batch_end(self, full_config, mocker):
         """on_train_batch_end()"""
 
@@ -291,7 +293,6 @@ class TestSetupOptimization:
         log_mock.assert_called_once_with("loss", test_process_log, prog_bar=True)
 
 
-@pytest.mark.skip(reason="need refactor")
 class TestProcessLoss:
     """_process_loss()"""
 
@@ -314,13 +315,14 @@ class TestProcessLoss:
         )
 
         # test
-        res = base._process_loss()
+        res = base._process_loss(base.loss)
 
         # assertions
         assert res == test_loss_detach_item / test_world_size  # 10 / 2 == 5
         dist_all_reduce_mock.all_reduce.assert_called_once()
         dist_all_reduce_mock.get_world_size.assert_called_once()
 
+    @pytest.mark.skip(reason="need refactor")
     def test_no_log_reduced_training_loss(self, full_config, mocker):
         test_loss_item = 10
 
@@ -336,7 +338,6 @@ class TestProcessLoss:
         assert res == test_loss_item
 
 
-@pytest.mark.skip(reason="need refactor")
 class Test_GetMaxSteps:
     """_get_max_steps()"""
 

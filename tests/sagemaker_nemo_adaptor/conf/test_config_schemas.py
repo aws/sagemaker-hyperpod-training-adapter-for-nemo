@@ -216,16 +216,34 @@ class Test_BaseModelConfig:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
     def test_after_model_validation(self, mocker, sagemaker_logger):
-        config = self.build_config(max_context_width=3)
+        config = self.build_config(max_context_width=3, hidden_size=3, num_attention_heads=3, num_key_value_heads=3)
         warning_spy = mocker.spy(sagemaker_logger, "warning")
 
         try:
             validated = BaseModelConfig.model_validate(config)
             assert validated.max_context_width == 3
-            assert warning_spy.call_count == 1
+            assert validated.hidden_size == 3
+            assert validated.num_attention_heads == 3
+            assert validated.num_key_value_heads == 3
+
+            assert warning_spy.call_count == 4
             assert "power of 2" in warning_spy.call_args[0][0]
+
+            config = self.build_config(activation_checkpointing=False, activation_loading_horizon=2)
+            validated = BaseModelConfig.model_validate(config)
+            assert warning_spy.call_count == 5
+            assert "activation_checkpointing is disabled" in warning_spy.call_args[0][0]
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
+
+        # Configs that raise value error
+        config = self.build_config(do_finetune=True, hf_model_name_or_path=None)
+        with pytest.raises(ValueError):
+            BaseModelConfig.model_validate(config)
+
+        config = self.build_config(tensor_model_parallel_degree=2, expert_model_parallel_degree=2)
+        with pytest.raises(ValueError):
+            BaseModelConfig.model_validate(config)
 
     def build_config(self, **kwargs) -> dict:
         return {
@@ -279,6 +297,24 @@ class Test_BaseTrainerConfig:
             "precision": "bf16",
             **kwargs,
         }
+
+    def test_after_model_validation(self, monkeypatch):
+        # Test self.devices not a multiple of GPUS_PER_NODE (8)
+        config = self.build_config(devices=1)
+        with pytest.raises(ValueError):
+            BaseTrainerConfig.model_validate(config)
+
+        # Test self.devices != LOCAL_WORLD_SIZE
+        monkeypatch.setenv("LOCAL_WORLD_SIZE", "8")
+        monkeypatch.setenv("WORLD_SIZE", "16")
+        config = self.build_config(devices=1)
+        with pytest.raises(ValueError):
+            BaseTrainerConfig.model_validate(config)
+
+        # Test self.num_nodes != WORLD_SIZE
+        config = self.build_config(devices=8, num_nodes=1)
+        with pytest.raises(ValueError):
+            BaseTrainerConfig.model_validate(config)
 
 
 class Test_BaseCheckpointCallbackConfig:
