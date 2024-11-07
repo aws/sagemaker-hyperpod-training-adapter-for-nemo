@@ -16,6 +16,7 @@ Put an x in the boxes that apply. If you're unsure about any of them, don't hesi
  - [ ] I have read the [CONTRIBUTING](https://github.com/aws/private-sagemaker-training-adapter-for-nemo-staging/blob/main/CONTRIBUTING.md) doc
  - [ ] I have run `pre-commit run --all-files` on my code. It will check for [this configuration](https://github.com/aws/private-sagemaker-training-adapter-for-nemo-staging/blob/main/.pre-commit-config.yaml).
  - [ ] I have updated any necessary documentation, including [READMEs](https://github.com/aws/private-sagemaker-training-adapter-for-nemo-staging/blob/main/README.md) and API docs (if appropriate)
+ - [ ] I have verified the licenses used in the license-files artifact generated in the Python License Scan CI check
 
 ### Tests
  - [ ] I have run `pytest` on my code and all unit tests passed.
