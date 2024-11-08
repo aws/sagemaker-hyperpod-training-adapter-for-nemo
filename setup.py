@@ -28,6 +28,8 @@ def extra_requirements():
 setup(
     name=package_name,
     version=__version__,
+    license="Apache 2.0",
+    license_files=("LICENSE",),
     keywords=package_keywords,
     include_package_data=True,
     packages=PEP420PackageFinder.find(where="src"),

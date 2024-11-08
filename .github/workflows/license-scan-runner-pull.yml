@@ -27,6 +27,10 @@ jobs:
       - name: Login to Amazon ECR
         run: aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_URI }}
 
+      - name: Download approved licenses from S3
+        run: |
+          aws s3 cp ${{ secrets.LICENSES_S3LINK }} ./ApprovedLicenses.txt
+
       - name: Review available disk space before cache cleanup
         run: |
           df -h
@@ -78,13 +82,16 @@ jobs:
             && pip install --force-reinstall --no-deps -r requirements/requirements.txt -r requirements/requirements_lightning.txt -r requirements/requirements_nemo.txt \
             && pip install --force-reinstall --no-deps . && pip install -r requirements/requirements_test.txt \
             && pip install pip-licenses \
-            && pip-licenses --with-description --order=license --format=json > LicenseSummary.txt \
-            && cat LicenseSummary.txt'
+            && pip-licenses --with-description --order=license --format=json> LicenseArtifact.txt \
+            && cat LicenseArtifact.txt \
+            && chmod +x ./scripts/licenseChecker.sh \
+            && ./scripts/licenseChecker.sh \
+           '
 
       - name: Upload license files as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: license-files
+          name: LicenseArtifact
           path: |
-            LicenseSummary.txt
+            LicenseArtifact.txt
           retention-days: 5
