@@ -27,6 +27,23 @@ jobs:
       - name: Login to Amazon ECR
         run: aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_URI }}
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22 # Set node version to 22
+
+      - name: Git clone repolinter, get ruleset and run repolinter
+        run: |
+          cd ..
+          git clone https://github.com/todogroup/repolinter.git
+          cd repolinter
+          npm install
+          aws s3 cp --recursive ${{ secrets.REPOLINTER_S3LINK }} ./repolinter-ruleset
+          node ./bin/repolinter.js lint ${{ github.workspace }} -r ./repolinter-ruleset/amazon-ospo-ruleset.json > ${{ github.workspace }}/scanOutput.txt
+          cd ${{ github.workspace }}
+          chmod +x ./scripts/licenseChecker.sh
+          ./scripts/licenseChecker.sh source_code
+
       - name: Download approved licenses from S3
         run: |
           aws s3 cp ${{ secrets.LICENSES_S3LINK }} ./ApprovedLicenses.txt
@@ -83,9 +100,8 @@ jobs:
             && pip install --force-reinstall --no-deps . && pip install -r requirements/requirements_test.txt -r requirements/requirements_profiling.txt \
             && pip install pip-licenses \
             && pip-licenses --with-description --order=license --format=json> LicenseArtifact.txt \
-            && cat LicenseArtifact.txt \
             && chmod +x ./scripts/licenseChecker.sh \
-            && ./scripts/licenseChecker.sh \
+            && ./scripts/licenseChecker.sh installed_packages\
            '
 
       - name: Upload license files as artifacts
