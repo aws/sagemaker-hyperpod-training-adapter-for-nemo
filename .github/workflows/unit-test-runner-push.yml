@@ -67,4 +67,4 @@ jobs:
             -w "/workspace" \
             -e "TRAINING_JOB_ARN=SM_DUMMY_ARN" \
             "${{ secrets.ECR_REPO_URI }}:${{ secrets.ECR_IMAGE_TAG }}" \
-            /bin/bash -c ': && pip install --force-reinstall --no-deps -r requirements/requirements.txt -r requirements/requirements_lightning.txt -r requirements/requirements_nemo.txt && pip install --force-reinstall --no-deps . && pip install -r requirements/requirements_test.txt && pytest'
+            /bin/bash -c ': && pip install ".[all]" && pip install --force-reinstall --no-deps . && pytest'

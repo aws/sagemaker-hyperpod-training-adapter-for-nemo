@@ -80,7 +80,7 @@ jobs:
             && source .venv/bin/activate \
             && pip install --upgrade pip setuptools \
             && pip install --force-reinstall --no-deps -r requirements/requirements.txt -r requirements/requirements_lightning.txt -r requirements/requirements_nemo.txt \
-            && pip install --force-reinstall --no-deps . && pip install -r requirements/requirements_test.txt \
+            && pip install --force-reinstall --no-deps . && pip install -r requirements/requirements_test.txt -r requirements/requirements_profiling.txt \
             && pip install pip-licenses \
             && pip-licenses --with-description --order=license --format=json> LicenseArtifact.txt \
             && cat LicenseArtifact.txt \

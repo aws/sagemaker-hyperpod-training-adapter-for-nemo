@@ -20,8 +20,12 @@ def extra_requirements():
     return {
         "nemo": parse_requirements("requirements_nemo.txt"),
         "lightning": parse_requirements("requirements_lightning.txt"),
-        "all": parse_requirements("requirements_nemo.txt") + parse_requirements("requirements_lightning.txt"),
         "test": parse_requirements("requirements_test.txt"),
+        "profiling": parse_requirements("requirements_profiling.txt"),
+        "all": parse_requirements("requirements_nemo.txt")
+        + parse_requirements("requirements_lightning.txt")
+        + parse_requirements("requirements_test.txt")
+        + parse_requirements("requirements_profiling.txt"),
     }
 
 

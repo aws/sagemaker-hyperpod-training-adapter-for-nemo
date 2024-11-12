@@ -7,7 +7,7 @@ To build a pip wheel from source execute ```python setup.py bdist_wheel``` from 
 Once the build is complete a ```/dist``` folder will be generated and populated with the resulting ```.whl``` object.
 
 ## Installing SageMakerNeMoAdaptor
-You can install SageMakerNeMoAdaptor 1 of 4 ways.
+You can install SageMakerNeMoAdaptor 1 of 5 ways.
 
 Use the command below to install only the sagemaker-nemo-adaptor library without the dependencies.
 
@@ -20,6 +20,10 @@ Use the command below to install the sagemaker-nemo-adaptor library along with a
 Use the command below to install the sagemaker-nemo-adaptor library along with all pytorch lightning dependencies.
 
 ```pip install sagemaker-nemo-adaptor[lightning]```
+
+Use the command below to install the sagemaker-nemo-adaptor library along with all profiling dependencies.
+
+```pip install sagemaker-nemo-adaptor[profiling]```
 
 Use the command below to install the sagemaker-nemo-adaptor library along with all its dependencies.
 
