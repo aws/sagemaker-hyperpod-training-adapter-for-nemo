@@ -5,11 +5,8 @@ from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 
-from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
-
 torch._dynamo.config.suppress_errors = True
 
-enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
 
 from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerMixtralModel
 from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder

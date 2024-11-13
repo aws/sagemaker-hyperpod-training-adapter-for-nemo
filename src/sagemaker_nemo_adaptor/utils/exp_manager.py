@@ -47,6 +47,7 @@ class ExpManagerConfig(NeMoExpManagerConfig):
     export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
     checkpoint_dir: Optional[str] = None
     auto_checkpoint: Optional[SageMakerAutoCheckpoint] = field(default_factory=SageMakerAutoCheckpoint)
+    log_step_timing: Optional[bool] = False
 
 
 def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictConfig, Dict]] = None) -> Optional[Path]:

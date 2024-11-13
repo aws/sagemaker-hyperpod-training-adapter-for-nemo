@@ -14,11 +14,6 @@ from torch.sagemaker.distributed.checkpoint.filesystem import (
     DistributedFileSystemWriter,
 )
 
-from sagemaker_nemo_adaptor.utils.temp_utils import enable_dummy_sm_env
-
-enable_dummy_sm_env()  # Need to be called before torch sagemaker is imported
-
-
 from sagemaker_nemo_adaptor.constants import SageMakerCheckpointType
 from sagemaker_nemo_adaptor.utils.callbacks.local_ckpt_io import (
     SageMakerLocalCheckpointIO,

@@ -30,7 +30,6 @@ CONFIG_MAPPING_HF_TO_RECIPE_ALIASES = {
 @unique
 class ModelType(Enum):
     BERT = "bert"
-    GPT_NEOX = "gpt_neox"
     GPT2 = "gpt2"
     LLAMA_V2 = "llama_v2"
     LLAMA_V3 = "llama_v3"

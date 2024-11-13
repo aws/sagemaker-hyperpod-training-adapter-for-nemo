@@ -187,11 +187,3 @@ def compute_tflops(cfg, model_config, sample_processed, step_time, world_size):
     tflops_per_gpu = num_flops / (step_time * 10**12 * world_size)
 
     return tflops_per_gpu
-
-
-def patch_neox_rope(model):
-    """Patch neox rope."""
-    device = torch.cuda.current_device()
-    for layer in model.gpt_neox.layers:
-        layer.attention.rotary_emb.sin_cached = layer.attention.rotary_emb.sin_cached.to(device)
-        layer.attention.rotary_emb.cos_cached = layer.attention.rotary_emb.cos_cached.to(device)

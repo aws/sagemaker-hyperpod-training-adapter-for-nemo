@@ -9,9 +9,7 @@ from sagemaker_nemo_adaptor.utils.train_utils import (
     apply_activation_checkpoint_moe,
     compute_tflops,
     get_batch_for_cp_rank,
-    patch_neox_rope,
 )
-from tests.test_utils import skip_if_lt_x_gpu
 
 
 class DummyTransformerLayer(nn.Module):
@@ -83,20 +81,3 @@ def test_compute_tflops():
     tflops = compute_tflops(cfg, model_config, sample_processed, step_time, world_size)
     assert isinstance(tflops, float)
     assert tflops > 0
-
-
-# TODO: Refactor this test so it does not require a GPU to run
-@skip_if_lt_x_gpu(1)
-def test_patch_neox_rope(dummy_model):
-    dummy_model.gpt_neox = MagicMock()
-    dummy_model.gpt_neox.layers = [MagicMock() for _ in range(3)]
-    for layer in dummy_model.gpt_neox.layers:
-        layer.attention.rotary_emb.sin_cached = torch.randn(10, 10)
-        layer.attention.rotary_emb.cos_cached = torch.randn(10, 10)
-
-    with patch("torch.cuda.current_device", return_value=0):
-        patch_neox_rope(dummy_model)
-
-    for layer in dummy_model.gpt_neox.layers:
-        assert layer.attention.rotary_emb.sin_cached.device.index == 0
-        assert layer.attention.rotary_emb.cos_cached.device.index == 0

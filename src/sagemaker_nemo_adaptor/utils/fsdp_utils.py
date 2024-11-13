@@ -100,26 +100,6 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
             from torch.sagemaker.tensor_parallel.transformer import TETransformerLayer
 
             transformer_layer = TETransformerLayer
-    elif model_type == "gpt2":
-        from transformers.models.gpt2.modeling_gpt2 import GPT2Block
-
-        transformer_layer = GPT2Block
-
-    elif model_type == "gpt_neox":
-        from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
-
-        transformer_layer = GPTNeoXLayer
-
-    elif model_type == "bloom":
-        from transformers.models.bloom.modeling_bloom import BloomBlock
-
-        transformer_layer = BloomBlock
-
-    elif model_type == "flash_gptneox":
-        from flash_attn.modules.block import ParallelBlock
-
-        # TODO: Add support for Block
-        transformer_layer = ParallelBlock
     elif model_type == "llama_v2" or model_type == "llama_v3":
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 

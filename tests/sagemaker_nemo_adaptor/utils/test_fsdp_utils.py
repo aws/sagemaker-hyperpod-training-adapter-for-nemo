@@ -46,10 +46,6 @@ def test_get_auto_wrap_policy():
 
 def test_get_transformer_layer():
     # Test for valid model types
-    assert get_transformer_layer("gpt2").__name__ == "GPT2Block"
-    assert get_transformer_layer("gpt_neox").__name__ == "GPTNeoXLayer"
-    assert get_transformer_layer("bloom").__name__ == "BloomBlock"
-    assert get_transformer_layer("flash_gptneox").__name__ == "ParallelBlock"
     # Unit tests are currently run in smpv2 container hence below code paths cannot be tested
     assert get_transformer_layer("llama_v2").__name__ == "LlamaDecoderLayer"
     assert get_transformer_layer("llama_v3").__name__ == "LlamaDecoderLayer"

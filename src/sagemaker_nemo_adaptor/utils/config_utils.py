@@ -59,14 +59,6 @@ def _validate_custom_recipe_extra_params(model: type[BaseModel]) -> None:
         raise AttributeError(msg)
 
 
-def _validate_params_not_provided_by_custom_recipe(cfg: DictConfig, base_config) -> None:
-    params_not_set = set(base_config.keys()) - set(cfg.keys())
-
-    if params_not_set:
-        msg = f"The following tunable parameters were not set on the custom recipe: {params_not_set}"
-        _logger.info(msg)
-
-
 def _validate_schema(cfg: DictConfig, extra="forbid") -> tuple[DictConfig, type[BaseModel]]:
     SchemaValidator = get_model_validator(use_smp_model=cfg.use_smp_model, extra=extra)
     config_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -93,7 +85,6 @@ def validate_config(extra="forbid"):
             _validate_model_type(cfg.model.get("model_type", None), cfg.model.get("hf_model_name_or_path", None))
             merged_config, validated_model = _validate_schema(cfg, extra=extra)
             _validate_custom_recipe_extra_params(validated_model)
-            _validate_params_not_provided_by_custom_recipe(cfg, merged_config)
 
             return fn(merged_config, *args, **kwargs)
 

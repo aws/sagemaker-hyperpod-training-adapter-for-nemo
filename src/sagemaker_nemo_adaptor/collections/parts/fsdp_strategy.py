@@ -61,10 +61,7 @@ from sagemaker_nemo_adaptor.utils.get_rank import (
     is_action_rank,
 )
 from sagemaker_nemo_adaptor.utils.gpu_utils import initialize_gpu_affinity
-from sagemaker_nemo_adaptor.utils.train_utils import (
-    apply_activation_checkpoint,
-    patch_neox_rope,
-)
+from sagemaker_nemo_adaptor.utils.train_utils import apply_activation_checkpoint
 
 
 class SageMakerFSDPStrategy(NLPFSDPStrategy):
@@ -206,9 +203,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 )
         if cfg.get("offload_activations", None):
             pytorch_model = offload_wrapper(pytorch_model)
-            if cfg.model_type == "gpt_neox" and cfg.patch_neox_rope:
-                # TODO: add a check to the model type and use enum for it
-                patch_neox_rope(pytorch_model)
         model.model = pytorch_model
         return model
 
