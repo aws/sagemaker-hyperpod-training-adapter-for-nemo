@@ -299,11 +299,6 @@ class Test_BaseTrainerConfig:
         }
 
     def test_after_model_validation(self, monkeypatch):
-        # Test self.devices not a multiple of GPUS_PER_NODE (8)
-        config = self.build_config(devices=1)
-        with pytest.raises(ValueError):
-            BaseTrainerConfig.model_validate(config)
-
         # Test self.devices != LOCAL_WORLD_SIZE
         monkeypatch.setenv("LOCAL_WORLD_SIZE", "8")
         monkeypatch.setenv("WORLD_SIZE", "16")

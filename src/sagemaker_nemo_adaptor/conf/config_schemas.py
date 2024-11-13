@@ -74,7 +74,8 @@ def validate_distributed_degrees(
     ep = expert_model_parallel_degree or 1
     cp = context_parallel_degree or 1
     degree_mult = sd * tp * ep
-    world_size = (num_nodes or 1) * GPUS_PER_NODE
+    gpu_per_node = int(os.environ.get("LOCAL_WORLD_SIZE", GPUS_PER_NODE))
+    world_size = (num_nodes or 1) * gpu_per_node
 
     # Validate the degree multiplication <= world_size
     if world_size % degree_mult > 0:
@@ -342,9 +343,6 @@ class BaseTrainerConfig(BaseModel):
                 raise ValueError(
                     f"'num_nodes' ({self.num_nodes}) does not equal actual number of nodes ({actual_num_nodes})"
                 )
-
-        if isinstance(self.devices, int) and self.devices % GPUS_PER_NODE != 0:
-            raise ValueError(f"'devices' ({self.devices}) must be a multiple of {GPUS_PER_NODE}")
 
         return self
 
