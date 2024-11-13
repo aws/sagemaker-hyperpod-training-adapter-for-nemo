@@ -1,5 +1,8 @@
 from sagemaker_nemo_adaptor.collections.data.base import BaseDataModule
 from sagemaker_nemo_adaptor.collections.data.datasets import DummyDataset
+from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
+
+_DEFAULT_VOCAB_SIZE = 1024
 
 
 class DummyDataModule(BaseDataModule):
@@ -9,13 +12,30 @@ class DummyDataModule(BaseDataModule):
 
     def train_dataloader(self):
         # TODO make vocab/seq_len configurable
-        vocab_size = 1024 if self.cfg.model.get("vocab_size", None) is None else self.cfg.model.vocab_size
+        vocab_size = self.get_vocab_size()
         self._train_ds = DummyDataset(vocab_size=vocab_size, seqlen=self.cfg.model.max_context_width)
         return self._build_dataloader(self._train_ds, batch_size=self.cfg.model.train_batch_size)
 
     def val_dataloader(self):
         """We're not doing validation for synthetic data"""
         return None
+
+    def get_vocab_size(self):
+        """
+        Respect predefined model vocab size from recipe. Otherwise use
+        default vocab size unless hf config vocab size if provided.
+        """
+        vocab_size = _DEFAULT_VOCAB_SIZE
+        if self.cfg.model.get("vocab_size", None) and self.trainer.model.predefined_model:
+            return self.cfg.model.vocab_size
+
+        hf_model_name_or_path = self.cfg.model.get("hf_model_name_or_path", None)
+        if hf_model_name_or_path:
+            hf_config = get_hf_config_from_name_or_path(self.cfg.model)
+            if hf_config:
+                vocab_size = hf_config.vocab_size
+
+        return vocab_size
 
     def get_batch(self, data):
         return data[0], data[1], data[0]
