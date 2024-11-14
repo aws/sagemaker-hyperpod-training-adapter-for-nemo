@@ -100,7 +100,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             "sm_activation_offloading": cfg.model.get("offload_activations", False),
             # these parallel degrees are defined only when `use_smp_model=True`.
             # defaulting to 1 for case when `use_smp_model=False`:
-            # https://tiny.amazon.com/ikqkw3kr/githawsprivblob1bf5srcsage
             "tensor_parallel_degree": cfg.model.get("tensor_model_parallel_degree", 1),
             "expert_parallel_degree": cfg.model.get("expert_model_parallel_degree", 1),
             "context_parallel_degree": cfg.model.get("context_parallel_degree", 1),

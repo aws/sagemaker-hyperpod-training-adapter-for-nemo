@@ -230,7 +230,7 @@ class SageMakerNLPBaseModel(ModelPT):
         assert self._cfg.hf_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
 
         # set env vars for efficient HF model loading (PEFT does not use SMP delayed param)
-        # see https://tiny.amazon.com/15r3rmil3/githhuggtranblob2790srctran
+        # see https://github.com/huggingface/transformers/blob/27903de7ecfc21e9b5a061c46c3b1ff73539d385/src/transformers/modeling_utils.py#L140
         os.environ["ACCELERATE_USE_FSDP"] = "True"
         os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
 

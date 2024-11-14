@@ -113,7 +113,7 @@ def apply_activation_checkpoint_moe(model=None, checkpoint_attn=True, checkpoint
 def get_batch_for_cp_rank(batch):
     # TODO: 1. work with SMP to get the final one
     # TODO: 2. add license
-    # Based on https://tiny.amazon.com/1bcmbuhje/githNVIDNeMoblob58d6nemocoll
+    # Based on https://github.com/NVIDIA/NeMo/blob/58d6bcee313a44d926a54e51c69222ddae20f070/nemo/collections/nlp/models/language_modeling/megatron_gpt_model.py#L840
     cp_size = tsm.state.cp_size
     cp_rank = tsm.state.cp_rank
     if cp_size > 1:
