@@ -8,9 +8,6 @@ env:
 
 on:
   create:
-    branches:
-      - 'main'
-      - 'release-*'
 
 permissions:
    id-token: write # This is required for requesting the JWT
@@ -18,9 +15,16 @@ permissions:
 
 jobs:
   build:
+    if: github.event.ref_type == 'branch' && (github.ref_name == 'main' || startsWith(github.ref_name, 'release-'))
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug event
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref type: ${{ github.event.ref_type }}"
+          echo "Ref name: ${{ github.ref_name }}"
+
       - name: Checkout code
         uses: actions/checkout@v3
         with:
