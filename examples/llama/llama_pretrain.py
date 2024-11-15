@@ -3,11 +3,11 @@ from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 
-from sagemaker_nemo_adaptor.collections.model.nlp import SageMakerLlamaModel
-from sagemaker_nemo_adaptor.collections.parts import SageMakerTrainerBuilder
-from sagemaker_nemo_adaptor.utils.config_utils import validate_config
-from sagemaker_nemo_adaptor.utils.exp_manager import exp_manager
-from sagemaker_nemo_adaptor.utils.sm_utils import setup_args_for_sm
+from hyperpod_nemo_adapter.collections.model.nlp import SageMakerLlamaModel
+from hyperpod_nemo_adapter.collections.parts import SageMakerTrainerBuilder
+from hyperpod_nemo_adapter.utils.config_utils import validate_config
+from hyperpod_nemo_adapter.utils.exp_manager import exp_manager
+from hyperpod_nemo_adapter.utils.sm_utils import setup_args_for_sm
 
 
 def train(cfg: DictConfig) -> None:

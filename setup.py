@@ -3,8 +3,8 @@ import os
 from setuptools import PEP420PackageFinder, setup
 
 # Source the package version as __version__
-exec(open("src/sagemaker_nemo_adaptor/version/__version__.py").read())
-package_name = "sagemaker-nemo-adaptor"
+exec(open("src/hyperpod_nemo_adapter/version/__version__.py").read())
+package_name = "hyperpod-nemo-adapter"
 package_keywords = "aws sagemaker"
 
 
@@ -38,13 +38,13 @@ setup(
     include_package_data=True,
     packages=PEP420PackageFinder.find(where="src"),
     package_dir={"": "src"},
-    package_data={"sagemaker_nemo_adaptor": ["conf/*.yaml"]},
+    package_data={"hyperpod_nemo_adapter": ["conf/*.yaml"]},
     install_requires=parse_requirements("requirements.txt"),
     extras_require=extra_requirements(),
     python_requires=">= 3.10",
     entry_points={
         "console_scripts": [
-            "merge-peft-checkpoint = sagemaker_nemo_adaptor.scripts.merge_peft_checkpoint:main",
+            "merge-peft-checkpoint = hyperpod_nemo_adapter.scripts.merge_peft_checkpoint:main",
         ],
     },
 )

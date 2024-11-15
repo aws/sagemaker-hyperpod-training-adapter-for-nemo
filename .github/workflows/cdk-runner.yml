@@ -2,7 +2,7 @@ name: Pipeline Synthesis
 
 env:
   # Note that the launcher branch needs to be created first as a prerequisite
-  # Replace with desired launcher branch here, if not specified will use the same branch as the adaptor
+  # Replace with desired launcher branch here, if not specified will use the same branch as the adapter
   # LAUNCHER_BRANCH: 'main'
   PIPELINE_NAME_PREFIX: 'hp'
 

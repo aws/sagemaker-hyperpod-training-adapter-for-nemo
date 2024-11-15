@@ -7,14 +7,14 @@ addopts = [
     "--cache-clear",
     "--quiet",
     "--durations=0",
-    "--cov=src/sagemaker_nemo_adaptor/",
+    "--cov=src/hyperpod_nemo_adapter/",
     # uncomment this line to see a detailed HTML test coverage report instead of the usual summary table output to stdout.
     # "--cov-report=html",
-    "tests/sagemaker_nemo_adaptor/",
+    "tests/hyperpod_nemo_adapter/",
 ]
 # both of these entries are required so test coverage stats and imports within tests/ work correctly
 pythonpath = ["src", "."]
-testpaths = ["tests/sagemaker_nemo_adapter"]
+testpaths = ["tests/hyperpod_nemo_adapter"]
 norecursedirs = [".eggs", ".pytest_cache", "*.egg-info", ".git", "build", "requirements"]
 filterwarnings = [
     "ignore::DeprecationWarning:lightning_fabric.*",
