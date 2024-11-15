@@ -63,8 +63,22 @@ class SageMakerNLPBaseModel(ModelPT):
         # Setup Transformer Engine Variable
         os.environ["NVTE_TORCH_COMPILE"] = "0"
         os.environ["TORCH_COMPILE_DISABLE"] = "1"
-        os.environ["NVTE_FUSED_ATTN"] = "1"
-        os.environ["NVTE_FLASH_ATTN"] = "0"
+
+        if self.do_patch_attn_context_parallel:
+            # avoid error trying to access non-existent attribute in TE extra state
+            # in `from_pretrained`
+            os.environ["ACCELERATE_USE_FSDP"] = "True"
+            os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
+
+        if self._cfg.get("nvte_attn_backend", None) is not None:
+            if self._cfg.nvte_attn_backend == "fused":
+                # use fused-attn backend
+                os.environ["NVTE_FUSED_ATTN"] = "1"
+                os.environ["NVTE_FLASH_ATTN"] = "0"
+            elif self._cfg.nvte_attn_backend == "flash":
+                # use flash-attn backend
+                os.environ["NVTE_FUSED_ATTN"] = "0"
+                os.environ["NVTE_FLASH_ATTN"] = "1"
 
         super().__init__(cfg, trainer)
 

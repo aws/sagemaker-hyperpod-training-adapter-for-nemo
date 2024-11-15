@@ -271,6 +271,9 @@ class BaseModelConfig(BaseModel):
     peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
     rope_scaling: BaseRopeScalingConfig = Field(default_factory=BaseRopeScalingConfig)
 
+    # Transformer Engine
+    nvte_attn_backend: Optional[Literal["fused", "flash"]] = None
+
     @model_validator(mode="before")
     def before_model_validations(cls, data: Any) -> Any:
         if data.get("max_position_embeddings") is None:
