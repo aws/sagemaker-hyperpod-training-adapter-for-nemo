@@ -129,12 +129,6 @@ class Test_BaseModelDataConfig:
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
 
-    def test_no_args(self):
-        with pytest.raises(ValueError) as err_info:
-            BaseModelDataConfig()
-
-        assert "train_dir" in str(err_info.value)
-
     def test_outside_of_range(self):
         invalid_val = "invalid_value"
         config = self.build_config(dataset_type=invalid_val)
@@ -151,13 +145,6 @@ class Test_BaseModelDataConfig:
             assert validated.dataset_type == "hf"
         except Exception as e:
             pytest.fail(f"Unexpectedly failed to validate config: {e}")
-
-    def test_before_model_validation(self):
-        config = self.build_config(use_synthetic_data=False)
-        del config["train_dir"]
-
-        with pytest.raises(ValueError) as e:
-            BaseModelDataConfig.model_validate(config)
 
     def build_config(self, **kwargs) -> dict:
         return {
@@ -244,6 +231,22 @@ class Test_BaseModelConfig:
         config = self.build_config(tensor_model_parallel_degree=2, expert_model_parallel_degree=2)
         with pytest.raises(ValueError):
             BaseModelConfig.model_validate(config)
+
+    def test_before_model_validation_data_config(self):
+        config = self.build_config()
+        config["data"] = self.build_data_config()
+        del config["data"]["train_dir"]
+        with pytest.raises(ValueError) as e:
+            BaseModelConfig.model_validate(config)
+
+    def build_data_config(self, **kwargs) -> dict:
+        return {
+            "train_dir": ["/fsx/datasets/train_ids_wsvocab_redo_2048_smaller"],
+            "val_dir": ["/fsx/datasets/llama_new/val"],
+            "dataset_type": "hf",
+            "use_synthetic_data": False,
+            **kwargs,
+        }
 
     def build_config(self, **kwargs) -> dict:
         return {

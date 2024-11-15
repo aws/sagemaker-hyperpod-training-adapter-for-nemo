@@ -26,11 +26,17 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from sagemaker_nemo_adaptor.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from sagemaker_nemo_adaptor.patches import patch_llama_flash_attn_cp
 from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
+from sagemaker_nemo_adaptor.utils.general_utils import can_use_multimodal
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 from sagemaker_nemo_adaptor.utils.train_utils import (
     compute_tflops,
     get_batch_for_cp_rank,
 )
+
+if can_use_multimodal():
+    from transformers import MllamaForConditionalGeneration
+
+    from sagemaker_nemo_adaptor.patches import patch_mllama_dtype
 
 TF_VERSION = pversion.parse(transformers.__version__)
 
@@ -134,7 +140,14 @@ class SageMakerNLPBaseModel(ModelPT):
         # this is mostly for llama 405b QLoRA CP.
         return not self.use_smp_model and self._cfg.get("context_parallel_degree", 1) > 1
 
+    @property
+    def do_patch_mllama(self):
+        # https://github.com/huggingface/transformers/issues/34207
+        return not self.use_smp_model and self._cfg.get("multi_modal", False)
+
     def setup(self, *a, **kw):
+        if self.do_patch_mllama:
+            patch_mllama_dtype.apply_patch(dtype=torch.bfloat16 if self._cfg.precision == "bf16" else torch.float32)
         if self.do_patch_attn_context_parallel:
             patch_llama_flash_attn_cp.apply_patch()
         if not self.predefined_model:
@@ -306,6 +319,12 @@ class SageMakerNLPBaseModel(ModelPT):
         _logger.info("Loading pretrained weights from %s.", path)
         use_flash_attn = self._cfg.use_flash_attention
         attn = "flash_attention_2"
+        # TODO add support later for flash att
+        # ValueError: MllamaForCausalLM does not support Flash Attention 2.0 yet
+        if self._cfg.get("multi_modal", None):
+            return MllamaForConditionalGeneration.from_pretrained(
+                path, config=model_cfg, torch_dtype=torch_dtype, quantization_config=quantization_config
+            )
         access_token = self._cfg.get("hf_access_token", None)
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_pretrained(
@@ -327,6 +346,11 @@ class SageMakerNLPBaseModel(ModelPT):
     def _build_model(self, model_cfg):
         use_flash_attn = self._cfg.use_flash_attention
         attn = "flash_attention_2"
+        # TODO add support later for flash att
+        # ValueError: MllamaForCausalLM does not support Flash Attention 2.0 yet
+        if self._cfg.get("multi_modal", None):
+            model = MllamaForConditionalGeneration(config=model_cfg)
+            return model
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return AutoModelForCausalLM.from_config(model_cfg)
         return AutoModelForCausalLM.from_config(model_cfg, attn_implementation=attn)
@@ -350,6 +374,12 @@ class SageMakerNLPBaseModel(ModelPT):
             )["loss"]
 
     def _training_step(self, batch, batch_idx, *a, **kw):
+        if self._cfg.get("multi_modal", None):
+            return self(
+                *a,
+                **batch,
+                **kw,
+            )["loss"]
         input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
         return self(
             *a,

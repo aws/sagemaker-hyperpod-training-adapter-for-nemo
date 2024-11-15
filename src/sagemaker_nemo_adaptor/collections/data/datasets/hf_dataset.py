@@ -80,3 +80,9 @@ class HuggingFacePretrainingDataset:
 
     def __len__(self) -> int:
         return len(self._dataset)
+
+
+class HuggingFacePretrainingVisionDataset(HuggingFacePretrainingDataset):
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        obj = self._dataset[index]
+        return obj

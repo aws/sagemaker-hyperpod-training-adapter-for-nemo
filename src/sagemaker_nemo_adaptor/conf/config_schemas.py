@@ -15,7 +15,11 @@ from sagemaker_nemo_adaptor.constants import (
     ModelType,
     SageMakerMonitorMode,
 )
-from sagemaker_nemo_adaptor.utils.general_utils import is_power_of_two, is_slurm_run
+from sagemaker_nemo_adaptor.utils.general_utils import (
+    can_use_multimodal,
+    is_power_of_two,
+    is_slurm_run,
+)
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
 
 _logger = Logger().get_logger()
@@ -131,14 +135,6 @@ class BaseModelDataConfig(BaseModel):
     dataset_type: Literal["hf", "synthetic"] = "hf"
     use_synthetic_data: bool = False
 
-    @model_validator(mode="after")
-    def before_model_validations(self) -> "BaseModelDataConfig":
-        if not self.use_synthetic_data:
-            if not self.train_dir:
-                raise ValueError("'train_dir' is required since model is not using Synthetic Data")
-
-        return self
-
 
 class BaseModelNsysProfileConfig(BaseModel):
     enabled: bool = False
@@ -237,6 +233,7 @@ class BaseModelConfig(BaseModel):
     mistral_sliding_window: int | None = Field(default=None, ge=1)
     rms_norm_eps: float | None = Field(default=None, ge=0)
     rope_theta: float = Field(default=10000.0)
+    multi_modal: bool = False
 
     # Mixture of Experts
     mixtral_sliding_window: int | None = Field(default=None, ge=1)
@@ -276,8 +273,24 @@ class BaseModelConfig(BaseModel):
 
     @model_validator(mode="before")
     def before_model_validations(cls, data: Any) -> Any:
+
         if data.get("max_position_embeddings") is None:
             data["max_position_embeddings"] = data.get("max_context_width")
+
+        model_data_config = data.get("data", None)
+        multi_modal = data.get("multi_modal")
+        if multi_modal and not can_use_multimodal():
+            raise ValueError("'multi_modal' requires transformers version of at least 4.45.2")
+
+        if multi_modal and not data.get("model_type") == "llama_v3":
+            raise ValueError("'multi_modal' only supported with 'model_type' llama_v3")
+
+        if model_data_config and not model_data_config.get("use_synthetic_data", None):
+            if not model_data_config.get("train_dir", None) and not multi_modal:
+                raise ValueError("'train_dir' is required since model is not using Synthetic or multi-modal Data")
+
+        if model_data_config and model_data_config.get("use_synthetic_data", None) and multi_modal:
+            raise ValueError("'use_synthetic_data' not supported with 'multi_modal' training")
 
         return data
 

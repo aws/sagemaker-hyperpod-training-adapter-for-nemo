@@ -134,8 +134,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         use_smp_model = self.use_smp_model
         cfg = self.cfg.model
         predefined_model = model.predefined_model
-        if not predefined_model:
-            # When running with model that is not predefined
+        if not predefined_model or cfg.get("multi_modal", False):
+            # When running with model that is not predefined or multimodal Llama 3.2
             # we use HF's accelerate to handle the FSDP and activation checkpoint
             # Map to HF name: https://github.com/huggingface/accelerate/blob/main/src/accelerate/utils/constants.py#L37
             if cfg.auto_wrap_policy == "transformer_auto_wrap_policy":
@@ -154,7 +154,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             precision=cfg.precision,
             use_smp_model=use_smp_model,
             use_peft=model.use_peft,
+            cast_forward_inputs=cfg.get("multi_modal", False),
         )
+
         sharding_strategy = get_sharding_strategy(cfg.sharding_strategy)
         backward_prefetch = get_backward_fetch_policy(cfg.backward_fetch_policy)
         param_init_fn, post_param_init_fn, model_context = self._setup_delayed_param(cfg, model)
@@ -207,7 +209,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
     def _setup_delayed_param(self, cfg, model):
         if not cfg.get("delayed_param", None):
             return None, None, nullcontext()
-        if self.use_smp_model:
+        if self.use_smp_model or cfg.get("multi_modal", False):
             return self._setup_smp_delayed_param(cfg, model)
         return self._setup_non_smp_delayed_param(cfg, model)
 

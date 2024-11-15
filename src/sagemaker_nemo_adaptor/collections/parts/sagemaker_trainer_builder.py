@@ -9,6 +9,7 @@ from pytorch_lightning import Trainer
 from sagemaker_nemo_adaptor.collections.data import (
     DummyDataModule,
     HuggingFaceDataModule,
+    HuggingFaceVisionDataModule,
 )
 from sagemaker_nemo_adaptor.collections.parts import SageMakerFSDPStrategy
 
@@ -196,6 +197,8 @@ class SageMakerTrainerBuilder:
         return callbacks
 
     def _create_data_module(self, trainer):
+        if self.cfg.model.multi_modal:
+            return HuggingFaceVisionDataModule(self.cfg, trainer)
         if self.cfg.model.data.use_synthetic_data:
             return DummyDataModule(self.cfg, trainer)
         if self.cfg.model.data.dataset_type == "hf":

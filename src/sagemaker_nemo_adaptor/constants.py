@@ -6,6 +6,7 @@ OPTIMIZER_KEY_PREFIX = "optimizer"
 TRAIN_SEQUENCE_NUMBER = "train_sequence_num"
 VAL_SEQUENCE_NUMBER = "val_sequence_num"
 DEFAULT_SEED = 12345
+MULTI_MODAL_HF_VERSION = "4.45.2"
 
 CONFIG_MAPPING_HF_TO_RECIPE_ALIASES = {
     "vocab_size": ["vocab_size"],

@@ -126,6 +126,7 @@ def set_mixed_precision_recipe(
     set_buffer_dtype: Union[int, str] = None,
     use_smp_model: bool = True,
     use_peft: bool = False,
+    cast_forward_inputs: bool = False,
 ) -> MixedPrecision:
     """
     Set FSDP mixed precision recipe. Over-write Nemo's _set_mixed_precision_recipe function to set buffer dtype
@@ -159,4 +160,5 @@ def set_mixed_precision_recipe(
         param_dtype=param_dtype,
         reduce_dtype=reduce_dtype,
         buffer_dtype=buffer_dtype,
+        cast_forward_inputs=cast_forward_inputs,
     )

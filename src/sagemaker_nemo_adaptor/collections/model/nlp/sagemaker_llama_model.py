@@ -6,7 +6,11 @@ from transformers import LlamaConfig
 from sagemaker_nemo_adaptor.collections.model import SageMakerNLPBaseModel
 from sagemaker_nemo_adaptor.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from sagemaker_nemo_adaptor.utils.config_utils import get_hf_config_from_name_or_path
+from sagemaker_nemo_adaptor.utils.general_utils import can_use_multimodal
 from sagemaker_nemo_adaptor.utils.log_utils import Logger
+
+if can_use_multimodal():
+    from transformers import MllamaConfig
 
 _logger = Logger().get_logger()
 
@@ -34,10 +38,11 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
         Get model config for Llama
         """
         configurable_dict = self._get_model_configurable_dict()
+        multi_modal_enabled = self._cfg.get("multi_modal", None)
         if self._cfg.get("hf_model_name_or_path", None) is not None:
             model_config = get_hf_config_from_name_or_path(self._cfg)
-            assert isinstance(
-                model_config, LlamaConfig
+            assert isinstance(model_config, LlamaConfig) or (
+                multi_modal_enabled and isinstance(model_config, MllamaConfig)
             ), f"model_type is set to llama but hf_model_name_or_path is not the same model, getting {type(model_config)}"
             # Update the config based on user's input
             model_config.update(configurable_dict)
