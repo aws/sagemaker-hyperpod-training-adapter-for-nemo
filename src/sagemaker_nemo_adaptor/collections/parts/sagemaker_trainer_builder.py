@@ -51,6 +51,12 @@ def _disable_aiobotocore_credential_log():
     logger.setLevel(logging.WARNING)
 
 
+def _disable_warning_message(message):
+    import warnings
+
+    warnings.filterwarnings("ignore", message)
+
+
 def _get_viztracer_profiler(cfg):
     if not SUPPORT_VIZTRACER:
         return
@@ -79,6 +85,9 @@ class SageMakerTrainerBuilder:
         self.cfg = cfg
         _disable_flash_attn_info_log()
         _disable_aiobotocore_credential_log()
+        # We don't save the state_dict of the dataloader. Instead, we save/load
+        # the state_dict of the datamodule.
+        _disable_warning_message(".*your dataloader is not resumable*")
 
     def _profile(self, cfg):
         self.tracer = _get_viztracer_profiler(cfg)
@@ -108,7 +117,7 @@ class SageMakerTrainerBuilder:
         export_sharded = sharded_save_any or sharded_save_last
         assert not (
             self.use_resilience_checkpoint and export_sharded
-        ), "Turning on auto_checkpoint and checkpoint in checkpoint_callback_paramsare are mutually exclusive"
+        ), "Turning on auto_checkpoint and checkpoint in checkpoint_callback_params are mutually exclusive"
 
         # Full checkpoint
         full_save_any = self.cfg.exp_manager.export_full_model.get("every_n_train_steps", 0) != 0
