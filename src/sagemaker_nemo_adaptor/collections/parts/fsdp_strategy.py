@@ -69,11 +69,10 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
     FSDP plugin for Pytorch Lightning with the support for sharding_strategy tensor-parallelism.
     SageMakerFSDPStrategy deals with
       - Distributed initialization, including torch distributed setup, smp distributed setup
-      - FSDP configuration and setup TODO: currently doing this within model class, we should revisit this
-      - Hook for checkpoint save/load (TODO: revisit when implementing checkpoint)
+      - FSDP configuration and setup
+      - Hook for checkpoint save/load
     """
 
-    # TODO: We need to figure out the best way of passing these arguments, need to revisit this during implementing recipe checker.
     # Currently feeding everything here so we can know what to deal with for strategy class
     def __init__(
         self,
@@ -317,9 +316,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         raise NotImplementedError(f"Checkpoint type '{typ}' not implemented")
 
     def sharded_optimizer_state_dict(self, optimizer: torch.optim.Optimizer):
-        # TODO: Turn off optimizer offload_to_cpu? i.e., offload_to_cpu=False.
-        #       We are unable to set offload_to_cpu=False now bc many features
-        #       are still not applied.
         with FSDP.state_dict_type(self.pytorch_model, StateDictType.SHARDED_STATE_DICT):
             return FSDP.optim_state_dict(self.pytorch_model, optimizer)
 
@@ -459,7 +455,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
 
     def remove_checkpoint(self, filepath: Union[str, Path]) -> None:
         """Remove checkpoints"""
-        # TODO: add when implementing checkpoint
         return
 
     @property
@@ -468,7 +463,6 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         FSDP sharding to match FSDP-sharded format between the checkpoint and the current
         model and optimizer.
         """
-        # TODO: add when implementing checkpoint
         return True
 
     def save_peft_model(self, checkpoint_dir):

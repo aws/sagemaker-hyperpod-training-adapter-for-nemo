@@ -185,8 +185,6 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
             self.load_data_module_and_lr_schedulers(trainer, state_dict)
             return True
         except Exception as e:
-            # TODO: We ignore all exceptions for now. Will add fine-grind
-            # error handling later.
             logging.warning(f"Load checkpoint fail. error: {e}")
             return False
 

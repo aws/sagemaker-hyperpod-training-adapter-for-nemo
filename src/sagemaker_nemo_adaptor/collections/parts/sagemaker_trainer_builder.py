@@ -89,7 +89,6 @@ class SageMakerTrainerBuilder:
         """
         Returns a FSDP strategy passed to Trainer.strategy.
         """
-        # check interactive environment TODO: Currently not supporting interactive mode
         _IS_INTERACTIVE = hasattr(sys, "ps1") or bool(sys.flags.interactive)
 
         if _IS_INTERACTIVE and self.cfg.trainer.devices == 1:
@@ -198,7 +197,6 @@ class SageMakerTrainerBuilder:
         plugins = self._create_plugins()
         callbacks = self._create_callbacks(callbacks)
 
-        # TODO: could be configurable with cfg.trainer
         trainer = Trainer(
             strategy=strategy,
             max_steps=self.cfg.trainer.max_steps,

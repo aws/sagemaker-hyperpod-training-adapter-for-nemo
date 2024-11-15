@@ -36,7 +36,7 @@ distributed_backend: nccl
 
 # Start training from pretrained model
 model:
-  model_type: llama_v3 # TODO: need functionality to parse model type automatically, this arg can stil be kept
+  model_type: llama_v3
   train_batch_size: 2
   val_batch_size: 1
   tensor_model_parallel_degree: 1

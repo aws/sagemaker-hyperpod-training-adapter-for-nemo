@@ -40,7 +40,7 @@ distributed_backend: nccl
 
 # Start training from pretrained model
 model:
-  model_type: mixtral # TODO: need functionality to parse model type automatically, this arg can stil be kept
+  model_type: mixtral
 
   train_batch_size: 1
   val_batch_size: 1

@@ -42,7 +42,6 @@ class SageMakerAutoCheckpoint:
 
 @dataclass
 class ExpManagerConfig(NeMoExpManagerConfig):
-    # TODO: add our customized params if needed
     log_reduced_training_loss: Optional[bool] = True
     export_full_model: Optional[SageMakerExportFullModel] = field(default_factory=lambda: SageMakerExportFullModel())
     checkpoint_dir: Optional[str] = None
@@ -97,16 +96,6 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
         explicit_log_dir=cfg.explicit_log_dir,
         use_datetime_version=cfg.use_datetime_version,
         resume_if_exists=cfg.resume_if_exists,
-    )
-
-    check_resume(
-        trainer,
-        log_dir,
-        cfg.resume_if_exists,
-        cfg.resume_past_end,
-        cfg.resume_ignore_no_checkpoint,
-        cfg.checkpoint_callback_params.dirpath,
-        cfg.resume_from_checkpoint,
     )
 
     checkpoint_name = name
@@ -188,7 +177,6 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
             cfg.neptune_logger_kwargs,
         )
 
-    # TODO: test these callbacks
     # add loggers timing callbacks
     if cfg.log_step_timing:
         timing_callback = TimingCallback(timer_kwargs=cfg.step_timing_kwargs or {})
@@ -206,16 +194,6 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
     if cfg.create_early_stopping_callback:
         early_stop_callback = EarlyStopping(**cfg.early_stopping_callback_params)
         trainer.callbacks.append(early_stop_callback)
-
-    if cfg.create_checkpoint_callback:
-        configure_checkpointing(
-            trainer,
-            log_dir,
-            checkpoint_name,
-            cfg.resume_if_exists,
-            cfg.checkpoint_callback_params,
-            cfg.create_preemption_callback,
-        )
 
     if cfg.disable_validation_on_resume:
         # extend training loop to skip initial validation when resuming from checkpoint
@@ -267,42 +245,3 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
         time.sleep(cfg.seconds_to_sleep)
 
     return log_dir
-
-
-def configure_checkpointing(
-    trainer: "pytorch_lightning.Trainer",
-    log_dir: Path,
-    name: str,
-    resume: bool,
-    params: "DictConfig",
-    create_preemption_callback: bool,
-):
-    """Adds ModelCheckpoint to trainer. Raises CheckpointMisconfigurationError if trainer already has a ModelCheckpoint
-    callback
-    """
-    # TODO: implement with checkpointing
-
-
-def check_resume(
-    trainer: "pytorch_lightning.Trainer",
-    log_dir: str,
-    resume_if_exists: bool = False,
-    resume_past_end: bool = False,
-    resume_ignore_no_checkpoint: bool = False,
-    dirpath: str = None,
-    resume_from_checkpoint: str = None,
-):
-    """Checks that resume=True was used correctly with the arguments pass to exp_manager. Sets
-    trainer._checkpoint_connector._ckpt_path as necessary.
-
-    Returns:
-        log_dir (Path): The log_dir
-        exp_dir (str): The base exp_dir without name nor version
-        name (str): The name of the experiment
-        version (str): The version of the experiment
-
-    Raises:
-        NotFoundError: If resume is True, resume_ignore_no_checkpoint is False, and checkpoints could not be found.
-        ValueError: If resume is True, and there were more than 1 checkpoint could found.
-    """
-    # TODO: Implement with checkpointing

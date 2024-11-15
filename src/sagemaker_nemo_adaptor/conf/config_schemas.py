@@ -265,7 +265,6 @@ class BaseModelConfig(BaseModel):
     # CHILD CONFIGS
     optim: BaseModelOptimizerConfig = Field(default_factory=BaseModelOptimizerConfig)
     data: BaseModelDataConfig = Field(default_factory=lambda: BaseModelDataConfig(use_synthetic_data=True))
-    # TODO: update recipes for gpu_affinity
     gpu_affinity: BaseGPUAffinityConfig = Field(default_factory=BaseGPUAffinityConfig)
     nsys_profile: BaseModelNsysProfileConfig = Field(default_factory=BaseModelNsysProfileConfig)
     viztracer: BaseVizTracerConfig = Field(default_factory=BaseVizTracerConfig)

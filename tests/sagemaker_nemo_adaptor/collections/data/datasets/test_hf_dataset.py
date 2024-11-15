@@ -59,14 +59,3 @@ def test_hugging_face_pretraining_dataset(mock_dataset):
     mock_dataset.to_json(os.path.join(unsupported_dir, "data.txt"))
     with pytest.raises(NotImplementedError):
         HuggingFacePretrainingDataset(unsupported_dir)
-
-    # TODO Test JSONGZ format
-    # Below code is failing datasets.exceptions.DataFilesNotFoundError: No (supported) data files found
-    # We need to enable this test after Fix PR https://github.com/aws/private-sagemaker-training-adapter-for-nemo-staging/pull/57 is merged
-    # jsongz_dir = os.path.join(temp_dir, "jsongz")
-    # os.makedirs(jsongz_dir)
-    # file_path = os.path.join(jsongz_dir, "data.json.gz")
-    # with gzip.open(file_path, 'wt') as f:
-    #     json.dump(mock_dataset.to_dict(), f)
-    # dataset = HuggingFacePretrainingDataset(jsongz_dir)
-    # assert_dataset(dataset)

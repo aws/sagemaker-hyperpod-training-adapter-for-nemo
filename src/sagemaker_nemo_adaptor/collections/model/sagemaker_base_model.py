@@ -60,7 +60,7 @@ class SageMakerNLPBaseModel(ModelPT):
         self._config_mapping_hf_to_recipe_aliases = None
 
         self.set_config_mapping_hf_to_recipe_aliases()
-        # Setup Transformer Engine Variable TODO: move it inside smp library
+        # Setup Transformer Engine Variable
         os.environ["NVTE_TORCH_COMPILE"] = "0"
         os.environ["TORCH_COMPILE_DISABLE"] = "1"
         os.environ["NVTE_FUSED_ATTN"] = "1"

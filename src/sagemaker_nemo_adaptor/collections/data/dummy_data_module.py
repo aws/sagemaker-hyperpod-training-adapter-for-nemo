@@ -11,7 +11,6 @@ class DummyDataModule(BaseDataModule):
     """
 
     def train_dataloader(self):
-        # TODO make vocab/seq_len configurable
         vocab_size = self.get_vocab_size()
         self._train_ds = DummyDataset(vocab_size=vocab_size, seqlen=self.cfg.model.max_context_width)
         return self._build_dataloader(self._train_ds, batch_size=self.cfg.model.train_batch_size)

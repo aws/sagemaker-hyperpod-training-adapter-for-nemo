@@ -20,7 +20,6 @@ class BaseDataModule(LightningDataModule):
     General Lightning DataModule class for SageMaker adaptor, it deals with
     1. Provide general function of build dataloader with sampler
     2. Setup data parallel parameters
-    3. (TODO: WIP) Compute the processed batches for checkpointing and throughput calculation.
     """
 
     def __init__(self, cfg: DictConfig, trainer: Trainer, collate_fn: Optional[Callable] = None):
@@ -49,10 +48,7 @@ class BaseDataModule(LightningDataModule):
     ):
         """
         Build sampler and dataloader
-        TODO: These arguments should be configurable through recipe, could be configured in datamodule/recipe checker
         """
-        # TODO: set sampler.epoch to correctly shuffle across epochs, else same order will be used for
-        # all epochs not relevant now as we have no epochs
         sampler = torch.utils.data.DistributedSampler(
             dataset,
             shuffle=shuffle,

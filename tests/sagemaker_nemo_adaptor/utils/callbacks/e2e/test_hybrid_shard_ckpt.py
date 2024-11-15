@@ -97,7 +97,6 @@ class TestHybridShardCheckpoint(TestCheckpoint):
             # test FSDP + DP: (fsdp4,dp1) -> (fsdp4,dp2)
             (1, 4, 4, 1, 4, 8),
             # test TP + DP: (tp2,dp2) -> (tp2,dp4)
-            # TODO(htzhong): Take care when fsdp = 1, currenlty no shard fsdp return the default process group.
             # (2, 1, 4, 2, 1, 8),
         ],
     )

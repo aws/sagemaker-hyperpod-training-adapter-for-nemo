@@ -7,7 +7,6 @@ def initialize_model_parallel_for_nemo(
     world_size, global_rank, local_rank, tensor_model_parallel_size=1, context_parallel_size=1, seed=None
 ):
     # updating NeMo globals
-    # TODO: Update EP,PP when applicable
     app_state = SageMakerAppState()
     app_state.global_rank = global_rank
     app_state.world_size = world_size
