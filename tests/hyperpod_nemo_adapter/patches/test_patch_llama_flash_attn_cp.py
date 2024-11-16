@@ -62,6 +62,6 @@ class TestPatchedFunctions(unittest.TestCase):
     def test_patched_LFA2__init__(self, mock_get_rng_state_tracker):
         config = LlamaConfig(num_key_value_heads=4, num_attention_heads=8, hidden_size=32)
         lfa2 = LlamaFlashAttention2(config=config)
-        patched_LFA2__init__(lfa2, config=config)
+        patched_LFA2__init__(lfa2, config=config, layer_idx=0)
         self.assertTrue(hasattr(lfa2, "core_attention"))
         self.assertIsInstance(lfa2.core_attention, te.attention.DotProductAttention)
