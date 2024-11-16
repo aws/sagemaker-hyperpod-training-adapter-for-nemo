@@ -350,6 +350,7 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         if "export_full_model" in cfg.exp_manager:
             self._save_full_every_n_steps = cfg.exp_manager.export_full_model.get("every_n_train_steps", None)
             self._save_last_full = cfg.exp_manager.export_full_model.get("save_last", True)
+            self._final_full_checkpoint_dir = cfg.exp_manager.export_full_model.get("final_export_dir", None)
         # Sharded checkpoint
         checkpoint_callback_params = {}
         if "checkpoint_callback_params" in cfg.exp_manager:
@@ -473,7 +474,11 @@ class SageMakerCheckpoint(SageMakerModelCheckpointBase):
         return save_dir
 
     def _save_full(self, trainer: "pl.Trainer", path):
-        path = os.path.join(path, "full", f"steps_{trainer.global_step}")
+        is_last_step = trainer.max_steps == trainer.global_step
+        if self._save_last_full and is_last_step and self._final_full_checkpoint_dir:
+            path = self._final_full_checkpoint_dir
+        else:
+            path = os.path.join(path, "full", f"steps_{trainer.global_step}")
         return SageMakerCheckpointType.FULL, path
 
     def _save_sharded(self, trainer: "pl.Trainer", path, monitor_candidates):

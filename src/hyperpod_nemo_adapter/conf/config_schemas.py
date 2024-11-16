@@ -385,6 +385,7 @@ class BaseAutoCheckpointConfig(BaseModel):
 class BaseExportFullModelConfig(BaseModel):
     every_n_train_steps: int = Field(default=0, ge=0)
     save_last: bool = True
+    final_export_dir: str = None
 
 
 class BaseExpManager(BaseModel):

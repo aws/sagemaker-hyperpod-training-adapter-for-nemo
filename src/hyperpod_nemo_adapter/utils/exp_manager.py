@@ -31,6 +31,7 @@ from hyperpod_nemo_adapter.utils.get_rank import is_global_rank_zero
 class SageMakerExportFullModel(CallbackParams):
     every_n_train_steps = 0
     save_last = True
+    final_export_dir: Optional[str] = None
 
 
 @dataclass
