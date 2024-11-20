@@ -234,6 +234,7 @@ class BaseModelConfig(BaseModel):
     rms_norm_eps: float | None = Field(default=None, ge=0)
     rope_theta: float = Field(default=10000.0)
     multi_modal: bool = False
+    tie_word_embeddings: bool = False
 
     # Mixture of Experts
     mixtral_sliding_window: int | None = Field(default=None, ge=1)
