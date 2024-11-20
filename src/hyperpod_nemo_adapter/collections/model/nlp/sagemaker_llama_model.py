@@ -51,7 +51,5 @@ class SageMakerLlamaModel(SageMakerNLPBaseModel):
                 **configurable_dict,
                 hidden_act="silu",
                 use_cache=False,
-                pretraining_tp=1,
-                tie_word_embeddings=False,
             )
         return model_config

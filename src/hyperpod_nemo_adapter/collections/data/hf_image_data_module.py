@@ -44,7 +44,9 @@ class HuggingFaceVisionDataModule(BaseDataModule):
                 self._train_ds = dataset.dataset
             else:
                 self._validation_ds = dataset.dataset
-        processor = AutoProcessor.from_pretrained(self.cfg.model.hf_model_name_or_path)
+
+        token = self.cfg.model.get("hf_access_token", None)
+        processor = AutoProcessor.from_pretrained(self.cfg.model.hf_model_name_or_path, token=token)
         processor.tokenizer.padding_side = "right"
         data_collator = OCRVQADataCollator(processor)
         self.collate_fn = data_collator
