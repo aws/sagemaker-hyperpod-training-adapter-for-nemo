@@ -125,7 +125,7 @@ def set_mixed_precision_recipe(
     grad_reduce_dtype: Union[int, str] = None,
     set_buffer_dtype: Union[int, str] = None,
     use_smp_model: bool = True,
-    use_peft: bool = False,
+    is_qlora: bool = False,
     cast_forward_inputs: bool = False,
 ) -> MixedPrecision:
     """
@@ -137,8 +137,8 @@ def set_mixed_precision_recipe(
     shared by FSDP.
     `reduce_dtype` sets gradient reduction data type.
     """
-    if use_peft:
-        # PEFT does not need mixed precision policy, has its own casts internally
+    if is_qlora:
+        # QLoRA does not support mixed precision policy, has its own casts internally
         return None
     param_dtype = torch.get_default_dtype()
     if precision == 16:

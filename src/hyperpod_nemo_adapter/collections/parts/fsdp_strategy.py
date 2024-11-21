@@ -153,8 +153,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         mixed_precision_policy = set_mixed_precision_recipe(
             precision=cfg.precision,
             use_smp_model=use_smp_model,
-            use_peft=model.use_peft,
-            cast_forward_inputs=cfg.get("multi_modal", False),
+            is_qlora=model.use_peft and cfg.peft.get("peft_type", None) == "qlora_4bit",
+            cast_forward_inputs=model.use_peft or cfg.get("multi_modal", False),
         )
 
         sharding_strategy = get_sharding_strategy(cfg.sharding_strategy)
