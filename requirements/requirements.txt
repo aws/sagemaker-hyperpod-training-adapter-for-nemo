@@ -1,0 +1,3 @@
+peft==0.12.0
+bitsandbytes==0.43.3
+gpu_affinity @ git+https://github.com/NVIDIA/gpu_affinity

@@ -1,0 +1,1 @@
+from .sagemaker_base_model import SageMakerNLPBaseModel
