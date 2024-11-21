@@ -1,45 +1,62 @@
 # HyperPodNemoAdapter
 
-HyperPodNemoAdapter is a NeMo based framework solution to help users running end-to-end training workload with minimal effort.
+HyperPodNemoAdapter is a generative AI framework built on top of [NVIDIA's NeMo](https://github.com/NVIDIA/NeMo)
+framework and [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning)
+for Large Language Models (LLMs).
+
+This solution enables you to leverage existing resources for common language
+model pre-training tasks, supporting popular models such as LLaMA, Mixtral, and
+Mistral. Additionally, our framework incorporates standard fine-tuning techniques,
+including Supervised Fine-Tuning (SFT) and Parameter-Efficient Fine-Tuning (PEFT)
+using LoRA or QLoRA.
+
+HyperPodNemoAdapter streamlines the development and deployment of LLMs, making
+it easier for researchers and developers to work with state-of-the-art language
+models. For more detailed information on distributed training capabilities, please
+refer to our comprehensive documentation: "HyperPod recipes for distributed training."
 
 ## Building HyperPodNemoAdapter
-To build a pip wheel from source execute ```python setup.py bdist_wheel``` from the root directory of the repository.
-Once the build is complete a ```/dist``` folder will be generated and populated with the resulting ```.whl``` object.
+
+If you want to create an installable package (wheel) for the HyperPodNemoAdapter
+library from its source code, you need to execute the command:
+
+```bash
+python setup.py bdist_wheel
+```
+
+from the root directory of the repository. Once the build is complete a `/dist`
+folder will be generated and populated with the resulting `.whl` object.
 
 ## Installing HyperPodNemoAdapter
-You can install HyperPodNemoAdapter 1 of 5 ways.
 
-Use the command below to install only the hyperpod-nemo-adapter library without the dependencies.
+### Pip
 
-```pip install hyperpod-nemo-adapter```
+HyperPodNemoAdapter can be installed using the Python package installer (pip)
+by running the command
 
-Use the command below to install the hyperpod-nemo-adapter library along with all nemo dependencies.
-
-```pip install hyperpod-nemo-adapter[nemo]```
-
-Use the command below to install the hyperpod-nemo-adapter library along with all pytorch lightning dependencies.
-
-```pip install hyperpod-nemo-adapter[lightning]```
-
-Use the command below to install the hyperpod-nemo-adapter library along with all profiling dependencies.
-
-```pip install hyperpod-nemo-adapter[profiling]```
-
-Use the command below to install the hyperpod-nemo-adapter library along with all its dependencies.
-
-```pip install hyperpod-nemo-adapter[all]```
-
-## Running jobs
+```bash
+pip install hyperpod-nemo-adapter[all]
 ```
-cd scripts
-sbatch -N 4 ./run_llama.sh
-```
+
+Please note that this library requires Python version 3.11 or later to function
+correctly. Alternatively, you have the option to install the library from its
+source code
+
+## HyperPod recipes
+
+SageMaker HyperPod Recipes offers a launcher for running training scripts built
+on HyperPodNemoAdapter. You can use this launcher on various cluster types,
+including Slurm, Kubernetes, or SageMaker Training Jobs. The recipes also include
+many useful templates for pre-training or fine-tuning models. For more information,
+please refer to the [SageMaker HyperPod Recipes](https://github.com/aws/sagemaker-hyperpod-recipes).
 
 ## Testing
 
 Follow the instructions on the "Installing HyperPodNemoAdapter" then use the command below to install the testing dependencies:
 
-```pip install hyperpod-nemo-adapter[test]```
+```bash
+pip install hyperpod-nemo-adapter[test]
+```
 
 ### Unit Tests
 To run the unit tests navigate to the root directory and use the command
