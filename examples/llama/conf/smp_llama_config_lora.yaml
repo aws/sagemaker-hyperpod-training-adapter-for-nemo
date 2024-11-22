@@ -80,7 +80,7 @@ model:
     low_freq_factor: 1.0
     original_max_position_embeddings: 8192
 
-  # Transformer Engine
+  # FP8 config
   fp8: False
   fp8_amax_history_len: 1024
   fp8_amax_compute_algo: max
@@ -110,8 +110,8 @@ model:
 
   # Data
   data:
-    train_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/train"]
-    val_dir: ["/fsx/datasets/c4/en/hf-tokenized/llama3/val"]
+    train_dir: null
+    val_dir: null
     dataset_type: hf
     use_synthetic_data: True
 
