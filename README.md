@@ -1,24 +1,23 @@
-# HyperPodNemoAdapter
+# Amazon SageMaker HyperPod training adapter for NeMo
 
-HyperPodNemoAdapter is a generative AI framework built on top of [NVIDIA's NeMo](https://github.com/NVIDIA/NeMo)
-framework and [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning)
-for Large Language Models (LLMs).
+Amazon SageMaker HyperPod training adapter for NeMo is a generative AI framework built on top of [NVIDIA's NeMo](https://github.com/NVIDIA/NeMo)
+framework and [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning).
 
-This solution enables you to leverage existing resources for common language
+This adapter enables you to leverage existing resources for common language
 model pre-training tasks, supporting popular models such as LLaMA, Mixtral, and
-Mistral. Additionally, our framework incorporates standard fine-tuning techniques,
+Mistral. Additionally, the framework incorporates standard fine-tuning techniques,
 including Supervised Fine-Tuning (SFT) and Parameter-Efficient Fine-Tuning (PEFT)
 using LoRA or QLoRA.
 
-HyperPodNemoAdapter streamlines the development and deployment of LLMs, making
-it easier for researchers and developers to work with state-of-the-art language
+Amazon SageMaker HyperPod training adapter for NeMo makes it
+it easier to work with state-of-the-art large language
 models. For more detailed information on distributed training capabilities, please
-refer to our comprehensive documentation: "HyperPod recipes for distributed training."
+refer to our documentation: [HyperPod Recipes](https://docs.aws.com/hyperpod/recipes).
 
-## Building HyperPodNemoAdapter
+## Building Amazon SageMaker HyperPod training adapter for NeMo
 
-If you want to create an installable package (wheel) for the HyperPodNemoAdapter
-library from its source code, you need to execute the command:
+If you want to create an installable package (wheel) for the Amazon SageMaker HyperPod training adapter for NeMo
+from source code, you will need to run:
 
 ```bash
 python setup.py bdist_wheel
@@ -27,11 +26,11 @@ python setup.py bdist_wheel
 from the root directory of the repository. Once the build is complete a `/dist`
 folder will be generated and populated with the resulting `.whl` object.
 
-## Installing HyperPodNemoAdapter
+## Installing Amazon SageMaker HyperPod training adapter for NeMo
 
 ### Pip
 
-HyperPodNemoAdapter can be installed using the Python package installer (pip)
+The Amazon SageMaker HyperPod training adapter for NeMo can be installed using the Python package installer (pip)
 by running the command
 
 ```bash
@@ -40,19 +39,18 @@ pip install hyperpod-nemo-adapter[all]
 
 Please note that this library requires Python version 3.11 or later to function
 correctly. Alternatively, you have the option to install the library from its
-source code
+source code.
 
-## HyperPod recipes
+## Amazon SageMaker HyperPod recipes
 
-SageMaker HyperPod Recipes offers a launcher for running training scripts built
-on HyperPodNemoAdapter. You can use this launcher on various cluster types,
-including Slurm, Kubernetes, or SageMaker Training Jobs. The recipes also include
-many useful templates for pre-training or fine-tuning models. For more information,
-please refer to the [SageMaker HyperPod Recipes](https://github.com/aws/sagemaker-hyperpod-recipes).
+Amazon SageMaker SageMaker HyperPod recipes offers launch scripts built on the Amazon SageMaker HyperPod training adapter for NeMo.
+You can use this launcher on Amazon SageMaker HyperPod (with Slurm or Amazon EKS orchestrator), or Amazon SageMaker Training jobs.
+The recipes also include templates for pre-training or fine-tuning models. For more information,
+please refer to [Amazon SageMaker HyperPod recipes](https://github.com/aws/sagemaker-hyperpod-recipes).
 
 ## Testing
 
-Follow the instructions on the "Installing HyperPodNemoAdapter" then use the command below to install the testing dependencies:
+Follow the instructions on the "Installing Amazon SageMaker HyperPod training adapter for NeMo" then use the command below to install the testing dependencies:
 
 ```bash
 pip install hyperpod-nemo-adapter[test]
@@ -89,7 +87,7 @@ data:
 ```
 Additional considerations:
 1. Make sure you have a ```vocab_size``` that fits your model.
-2. Make sure your ```max_context_width``` aligns with the sequence length that the dataset was tokenized at.
+2. Make sure your ```max_context_width``` aligns with the sequence length of your tokenized dataset.
 
 ## Contributing
 
