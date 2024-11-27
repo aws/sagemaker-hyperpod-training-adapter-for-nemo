@@ -72,7 +72,6 @@ def test_exp_manager_valid_cfg(mock_trainer):
         "version": test_version,
         "use_datetime_version": False,
         "resume_if_exists": False,
-        "create_mlflow_logger": True,
         "ema": {"enable": True},
         "create_early_stopping_callback": True,
         "max_time_per_run": "00:03:55:00",
