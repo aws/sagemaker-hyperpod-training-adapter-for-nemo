@@ -1,0 +1,70 @@
+name: Python Unit Test CI After Commit
+
+on:
+  push:
+    branches:
+      - main # Triggers on direct pushes to the main branch
+
+permissions:
+   id-token: write # This is required for requesting the JWT
+   contents: read # This is required for actions/checkout
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.RUNNER_ROLE_ARN }}
+          role-session-name: unit-test-runner-push-session
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        run: aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_URI }}
+
+      - name: Review available disk space before cache cleanup
+        run: |
+          df -h
+
+      - name: Clean docker cache
+        run: |
+          docker system prune -a --volumes -f
+          docker image prune -a -f
+
+      - name: Clean apt cache
+        run: |
+          sudo apt-get clean
+          sudo apt-get autoremove
+
+      - name : Clean hosted tool cache
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/microsoft
+
+      - name : Clean android user cache
+        run: |
+          sudo rm -rf /usr/local/lib/android
+
+      - name: Review available disk space after cache cleanup
+        run: |
+          df -h
+
+      - name: Pull docker image
+        run: docker pull ${{ secrets.ECR_REPO_URI }}:${{ secrets.ECR_IMAGE_TAG }}
+
+      - name: Run unit tests
+        run: |
+          # FIXME: it looks like /bin/bash interpret pip incorectly. Add a
+          # dummy command `:` before running pip.
+          docker run -t --rm \
+            -v "${PWD}:/workspace" \
+            -w "/workspace" \
+            -e "TRAINING_JOB_ARN=SM_DUMMY_ARN" \
+            "${{ secrets.ECR_REPO_URI }}:${{ secrets.ECR_IMAGE_TAG }}" \
+            /bin/bash -c ': && pip install ".[all]" && pip install --force-reinstall --no-deps . && pytest'
