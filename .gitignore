@@ -1,0 +1,29 @@
+# log and data files
+outputs/
+lightning_logs/
+trace
+.DS_Store
+.hydra
+.bash_history.local
+
+# Distribution packaging
+build/
+.eggs/
+*.egg-info/
+*.egg
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+**.pyc
+core.*
+
+# Unit test / coverage reports
+coverage_html_report/
+.coverage
+.coverage.*
+.cache
+*.cover
+.hypothesis/
+.pytest_cache/
