@@ -12,7 +12,7 @@ using LoRA or QLoRA.
 Amazon SageMaker HyperPod training adapter for NeMo makes it
 it easier to work with state-of-the-art large language
 models. For more detailed information on distributed training capabilities, please
-refer to our documentation: [HyperPod Recipes](https://docs.aws.com/hyperpod/recipes).
+refer to our documentation: [HyperPod recipes](https://docs.aws.com/hyperpod/recipes).
 
 ## Building Amazon SageMaker HyperPod training adapter for NeMo
 
