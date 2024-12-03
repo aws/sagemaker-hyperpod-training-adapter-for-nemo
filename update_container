@@ -1,0 +1,6 @@
+#!/bin/bash
+cp -r ./src/hyperpod_nemo_adapter/*.py /opt/conda/lib/python3.11/site-packages/hyperpod_nemo_adapter/
+cp -r ./src/hyperpod_nemo_adapter/collections /opt/conda/lib/python3.11/site-packages/hyperpod_nemo_adapter/
+cp -r ./src/hyperpod_nemo_adapter/patches /opt/conda/lib/python3.11/site-packages/hyperpod_nemo_adapter/
+cp -r ./src/hyperpod_nemo_adapter/conf /opt/conda/lib/python3.11/site-packages/hyperpod_nemo_adapter/
+cp -r ./src/hyperpod_nemo_adapter/utils /opt/conda/lib/python3.11/site-packages/hyperpod_nemo_adapter/
