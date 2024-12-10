@@ -34,12 +34,11 @@ The Amazon SageMaker HyperPod training adapter for NeMo can be installed using t
 by running the command
 
 ```bash
-pip install hyperpod-nemo-adapter[all]
+pip install .[all]
 ```
 
 Please note that this library requires Python version 3.11 or later to function
-correctly. Alternatively, you have the option to install the library from its
-source code.
+correctly.
 
 ## Amazon SageMaker HyperPod recipes
 
@@ -53,7 +52,7 @@ please refer to [Amazon SageMaker HyperPod recipes](https://github.com/aws/sagem
 Follow the instructions on the "Installing Amazon SageMaker HyperPod training adapter for NeMo" then use the command below to install the testing dependencies:
 
 ```bash
-pip install hyperpod-nemo-adapter[test]
+pip install .[test]
 ```
 
 ### Unit Tests
