@@ -243,14 +243,15 @@ class BaseModelConfig(BaseModel):
     vocab_size: int | None = Field(default=None, ge=1)
     num_key_value_heads: int | None = Field(default=None, ge=1)
     use_flash_attention: bool | None = None
-    mistral_sliding_window: int | None = Field(default=None, ge=1)
+    sliding_window: int | None = Field(default=None, ge=1)
+    use_sliding_window: bool | None = None
+    max_window_layers: int | None = Field(default=None, ge=1)
     rms_norm_eps: float | None = Field(default=None, ge=0)
     rope_theta: float = Field(default=10000.0)
     multi_modal: bool = False
     tie_word_embeddings: bool = False
 
     # Mixture of Experts
-    mixtral_sliding_window: int | None = Field(default=None, ge=1)
     num_experts_per_tok: int | None = Field(default=None, ge=1)
     num_local_experts: int | None = Field(default=None, ge=1)
     moe_load_balancing: Literal["sinkhorn", "balanced", "aux_loss", "none"] = "sinkhorn"

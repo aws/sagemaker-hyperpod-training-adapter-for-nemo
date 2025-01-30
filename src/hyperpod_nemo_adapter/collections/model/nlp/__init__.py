@@ -11,6 +11,11 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
+from .sagemaker_deepseek_model import (
+    SageMakerDeepSeekDistilledLlamaModel,
+    SageMakerDeepSeekDistilledQwenModel,
+)
 from .sagemaker_llama_model import SageMakerLlamaModel
 from .sagemaker_mistral_model import SageMakerMistralModel
 from .sagemaker_mixtral_model import SageMakerMixtralModel
+from .sagemaker_qwen_model import SageMakerQwenModel

@@ -49,6 +49,7 @@ class ModelType(Enum):
     LLAMA_V3 = "llama_v3"
     MISTRAL = "mistral"
     MIXTRAL = "mixtral"
+    QWEN_V2 = "qwen_v2"
 
 
 class DataTypes:
