@@ -51,7 +51,7 @@ distributed_backend: nccl
 
 # Model training configs
 model:
-  model_type: llama_v3
+  model_type: deepseek_r1_llama_v3
   # Base configs
   train_batch_size: 1
   val_batch_size: 1

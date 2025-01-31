@@ -55,7 +55,7 @@ class SageMakerDeepSeekDistilledQwenModel(SageMakerQwenModel):
     Lightning Model class for DeepSeek-r1 Distilled Qwen2
     """
 
-    predefined_model = False
+    predefined_model = True
 
     def get_model_config(self):
         """

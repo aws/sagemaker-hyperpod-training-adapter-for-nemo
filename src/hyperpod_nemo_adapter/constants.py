@@ -47,6 +47,7 @@ class ModelType(Enum):
     GPT2 = "gpt2"
     LLAMA_V2 = "llama_v2"
     LLAMA_V3 = "llama_v3"
+    DEEPSEEK_R1_LLAMA_V3 = "deepseek_r1_llama_v3"
     MISTRAL = "mistral"
     MIXTRAL = "mixtral"
     QWEN_V2 = "qwen_v2"

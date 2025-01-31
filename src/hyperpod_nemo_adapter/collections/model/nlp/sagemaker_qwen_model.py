@@ -22,7 +22,7 @@ class SageMakerQwenModel(SageMakerNLPBaseModel):
     Lightning Model class for Qwen
     """
 
-    predefined_model = False
+    predefined_model = True
 
     def get_model_config(self):
         """

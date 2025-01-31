@@ -113,7 +113,7 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
             from torch.sagemaker.tensor_parallel.transformer import TETransformerLayer
 
             transformer_layer = TETransformerLayer
-    elif model_type == "llama_v2" or model_type == "llama_v3":
+    elif "llama_v2" in model_type or "llama_v3" in model_type:
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
         transformer_layer = LlamaDecoderLayer
@@ -126,6 +126,10 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
         from transformers.models.mixtral.modeling_mixtral import MixtralDecoderLayer
 
         transformer_layer = MixtralDecoderLayer
+    elif "qwen_v2" in model_type:
+        from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
+
+        transformer_layer = Qwen2DecoderLayer
 
     if transformer_layer == None:
         raise Exception(f"transformer_layer for model type {model_type} not defined.")

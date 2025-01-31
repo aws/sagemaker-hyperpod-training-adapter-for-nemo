@@ -55,7 +55,9 @@ def _validate_model_type(model_type: Optional[str], hf_model_name_or_path: Optio
 
     # Enums support the `in` operator starting with Python 3.12
     if model_type is not None and model_type not in [key.value for key in ModelType]:
-        msg = f'Model "{model_type}" is not supported by SageMaker Model Parallel. Please set `use_smp_model` to False'
+        msg = (
+            f'Model "{model_type}" is not supported by SageMaker Model Parallel. Please ensure `use_smp_model` is False'
+        )
         _logger.warning(msg)
 
 
