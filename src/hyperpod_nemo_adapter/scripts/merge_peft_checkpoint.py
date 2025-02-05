@@ -13,9 +13,12 @@
 
 import argparse
 import os
-
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
+
+from nemo.utils import logging
+
+logging.info('Penrose after imports on main.py')
 
 
 def run(args):
@@ -66,4 +69,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.info('Penrose before main()')
     main()

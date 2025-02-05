@@ -10,20 +10,28 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+from nemo.utils import logging
+logging.info('Penrose before imports on deepseek_pretrain.py')
 
 import hydra
-from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 
+logging.info('Penrose before hyperpod_nemo_adapter.collections.model.nlp on deepseek_pretrain.py')
 from hyperpod_nemo_adapter.collections.model.nlp import (
     SageMakerDeepSeekDistilledLlamaModel,
     SageMakerDeepSeekDistilledQwenModel,
 )
+logging.info('Penrose before SageMakerTrainerBuilder on deepseek_pretrain.py')
 from hyperpod_nemo_adapter.collections.parts import SageMakerTrainerBuilder
+logging.info('Penrose before validate_config on deepseek_pretrain.py')
 from hyperpod_nemo_adapter.utils.config_utils import validate_config
+logging.info('Penrose before exp_manager on deepseek_pretrain.py')
 from hyperpod_nemo_adapter.utils.exp_manager import exp_manager
+logging.info('Penrose before setup_args_for_sm on deepseek_pretrain.py')
 from hyperpod_nemo_adapter.utils.sm_utils import setup_args_for_sm
+
+logging.info('Penrose after imports on deepseek_pretrain.py')
 
 
 def train(cfg: DictConfig) -> None:

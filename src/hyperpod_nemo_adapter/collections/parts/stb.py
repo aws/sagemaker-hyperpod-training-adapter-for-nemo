@@ -12,10 +12,9 @@
 # language governing permissions and limitations under the License.
 
 from nemo.utils import logging
+logging.info("Penrose before imports on sagemaker_trainer_builder2.py")
 
-logging.info("Penrose before SageMakerFSDPStrategy on parts.__init__.py")
-from .fsdp_strategy import SageMakerFSDPStrategy
-logging.info("Penrose before SageMakerTrainerBuilder on parts.__init__.py")
-from .sagemaker_trainer_builder import SageMakerTrainerBuilder
+class SageMakerTrainerBuilder:
 
-logging.info("Penrose after imports on parts.__init__.py")
+    def __init__(self):
+        pass
