@@ -427,7 +427,7 @@ class BaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid" if is_slurm_run() else "allow")
     name: list[str] = ["hf_llama_8b"]
     use_smp_model: bool = True
-    distributed_backend: Literal["smddp", "nccl"]
+    distributed_backend: Literal["nccl"]
     log_perf_metrics: bool = False
 
     model: BaseModel

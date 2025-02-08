@@ -31,12 +31,14 @@ def train(cfg: DictConfig) -> None:
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
     exp_manager(trainer, cfg.exp_manager)
+
     if "llama" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledLlamaModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     if "qwen" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledQwenModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     elif "deepseek_r1" in cfg.model.model_type or "deepseek_v3" in cfg.model.model_type:
         pass  # TODO add a model class for the first-party DeepSeek models (DeepSeek-R1, DeepSeek-V3...)
+
     trainer.fit(model_module, datamodule=data_module)
 
 

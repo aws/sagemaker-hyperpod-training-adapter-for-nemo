@@ -48,12 +48,6 @@ from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
 )
 from torch.sagemaker.utils import utils as tsm_utils
 
-smddp_available = True
-try:
-    import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
-except:
-    smddp_available = False
-
 from hyperpod_nemo_adapter.constants import (
     OPTIMIZER_KEY_PREFIX,
     SageMakerCheckpointType,
@@ -97,13 +91,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.smp_config_dict = self._setup_smp_config(cfg)
         self.app_state = SageMakerAppState()
 
-        # Init from original PT-Lightning policy to avoid megatron specific initialization
+        # Init from original PT-Lightening policy to avoid Megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
-        if self.cfg.distributed_backend == "smddp" and not smddp_available:
-            self.cfg.distributed_backend = "nccl"
-            logging.warning(
-                "SMDDP library is not available within the current training environment. Falling back to NCCL backend."
-            )
         self._process_group_backend = self.cfg.distributed_backend
 
     def _setup_smp_config(self, cfg):
