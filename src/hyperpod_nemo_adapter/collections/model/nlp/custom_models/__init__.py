@@ -11,4 +11,9 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
-__version__ = "1.2.0"
+from .configuration_deepseek import DeepseekV3Config
+from .modeling_deepseek import (
+    DeepseekV3DecoderLayer,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+)

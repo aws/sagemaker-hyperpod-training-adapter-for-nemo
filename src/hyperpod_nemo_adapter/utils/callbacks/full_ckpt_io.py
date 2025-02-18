@@ -20,7 +20,9 @@ from lightning_fabric.utilities.types import _PATH
 
 
 class SageMakerFullCheckpointIO(TorchCheckpointIO):
-    def save_checkpoint(self, checkpoint: Dict[str, Any], path: _PATH, storage_options: Optional[Any] = None) -> None:
+    def save_checkpoint(
+        self, checkpoint: Dict[str, Any], path: _PATH, storage_options: Optional[Any] = None, *a, **kw
+    ) -> None:
         if dist.get_rank() == 0:
             trainer = storage_options
             # Save full model in huggingface format. pytorch_model.bin is used during from_pretrined.

@@ -27,9 +27,9 @@ from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl,
+    OffloadWrapper,
     apply_activation_checkpointing,
     checkpoint_wrapper,
-    offload_wrapper,
 )
 from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -47,7 +47,11 @@ from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
     sm_state_dict_type,
 )
 from torch.sagemaker.utils import utils as tsm_utils
+from transformers import AutoModelForCausalLM
 
+from hyperpod_nemo_adapter.collections.model.nlp.custom_models.modeling_deepseek import (
+    DeepseekV3ForCausalLM,
+)
 from hyperpod_nemo_adapter.constants import (
     OPTIMIZER_KEY_PREFIX,
     SageMakerCheckpointType,
@@ -91,14 +95,14 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         self.smp_config_dict = self._setup_smp_config(cfg)
         self.app_state = SageMakerAppState()
 
-        # Init from original PT-Lightning policy to avoid Megatron specific initialization
+        # Init from original PT-Lightening policy to avoid Megatron specific initialization
         super(NLPFSDPStrategy, self).__init__(**kwargs)
         self._process_group_backend = self.cfg.distributed_backend
 
     def _setup_smp_config(self, cfg):
         smp_config = {
-            "activation_loading_horizon": cfg.model.get("activation_loading_horizon", 2),
-            "sm_activation_offloading": cfg.model.get("offload_activations", False),
+            # "activation_loading_horizon": cfg.model.get("activation_loading_horizon", 2),
+            "sm_activation_offloading": False,  # migrading from tsm activation offloading to oss OffloadWrapper
             # these parallel degrees are defined only when `use_smp_model=True`.
             # defaulting to 1 for case when `use_smp_model=False`:
             "tensor_parallel_degree": cfg.model.get("tensor_model_parallel_degree", 1),
@@ -150,7 +154,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             fsdp_plugin.set_auto_wrap_policy(model.model)
             auto_wrap_policy = fsdp_plugin.auto_wrap_policy
         else:
-            transformer_layer = get_transformer_layer(cfg.model_type, use_smp_model, cfg.moe)
+            transformer_layer = get_transformer_layer(cfg.model_type, use_smp_model, cfg.moe, model.peft_type)
             auto_wrap_policy = get_auto_wrap_policy(cfg.auto_wrap_policy, transformer_layer, model.use_peft)
         mixed_precision_policy = set_mixed_precision_recipe(
             precision=cfg.precision,
@@ -167,6 +171,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
             model_context,
             tsm_utils.timeit(True, "FSDP constructor", self.global_rank),
         ):
+            if dist.get_rank() == 0:
+                logging.info(f"Using FSDP plugin with auto_wrap_policy: {auto_wrap_policy}")
+
             pytorch_model = FSDP(
                 module=model.model,
                 auto_wrap_policy=auto_wrap_policy,
@@ -180,6 +187,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                 param_init_fn=param_init_fn,
                 post_param_init_fn=post_param_init_fn,
                 sync_module_states=model.do_finetune_with_pretrained_weights,
+                # ignored_modules=ignored_params,
             )
             self._record_fsdp_process_group(pytorch_model)
             self._record_replication_process_group()
@@ -204,7 +212,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
                     moe=cfg.moe,
                 )
         if cfg.get("offload_activations", None):
-            pytorch_model = offload_wrapper(pytorch_model)
+            pytorch_model = OffloadWrapper(pytorch_model)
         model.model = pytorch_model
         return model
 
@@ -445,7 +453,18 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         1. In case of sharded checkpoint, all ranks store unique checkpoints.
         2. In case of non-sharded checkpoint, all data-parallel rank 0 store checkpoints.
         """
-        self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options)
+        modeling_class = AutoModelForCausalLM
+        model_config = None
+        if self.cfg.model.model_type == "deepseek_r1":
+            modeling_class = DeepseekV3ForCausalLM
+            model_config = self.model.get_model_config()
+        self.checkpoint_io.save_checkpoint(
+            checkpoint=checkpoint,
+            path=filepath,
+            storage_options=storage_options,
+            modeling_class=modeling_class,
+            model_config=model_config,
+        )
 
     def load_checkpoint(
         self,

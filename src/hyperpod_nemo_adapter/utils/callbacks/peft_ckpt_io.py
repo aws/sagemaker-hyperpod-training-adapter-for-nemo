@@ -34,7 +34,14 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
 
-    def save_checkpoint(self, checkpoint: Dict[str, Any], path: _PATH, storage_options: Optional[Any] = None) -> None:
+    def save_checkpoint(
+        self,
+        checkpoint: Dict[str, Any],
+        path: _PATH,
+        storage_options: Optional[Any] = None,
+        modeling_class: Optional[Any] = AutoModelForCausalLM,
+        model_config: Optional[Any] = None,
+    ) -> None:
         # this function may take a long time for large models. the save on rank 0 takes the vast majority of the time.
         # so if we have a nccl op (barrier) after this function, it will likely timeout while waiting for rank 0, causing a crash.
         # so create a new process group with a long timeout, and run barrier with this pg before returning.
@@ -48,8 +55,9 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
         dist.barrier(group=pg)  # Wait for adapter save to finish
         # Save the fully merged model on rank 0 only
         if dist.get_rank() == 0:
-            self._merge_and_upload_peft_model(trainer, path)
-        dist.barrier(group=pg)  # Wait for merged save to finish
+            self._merge_and_upload_peft_model(
+                trainer=trainer, checkpoint_dir=path, modeling_class=modeling_class, model_config=model_config
+            )
         dist.destroy_process_group(group=pg)
 
     def load_checkpoint(
@@ -66,7 +74,14 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
     def teardown(self):
         pass
 
-    def _merge_and_upload_peft_model(self, trainer: "pl.Trainer", checkpoint_dir: str, upload_to_storage=True):
+    def _merge_and_upload_peft_model(
+        self,
+        trainer: "pl.Trainer",
+        checkpoint_dir: str,
+        upload_to_storage=True,
+        modeling_class=AutoModelForCausalLM,
+        model_config=None,
+    ):
         """Merge adapter weights with base model and upload final model"""
         hf_model_name_or_path = trainer.strategy.cfg.model.get("hf_model_name_or_path", None)
         access_token = trainer.strategy.cfg.model.get("hf_access_token", None)
@@ -83,14 +98,27 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
         is_patched = patch_llama_flash_attn_cp.is_patched
         if is_patched:
             patch_llama_flash_attn_cp.unapply_patch()
-        base_model = AutoModelForCausalLM.from_pretrained(
-            hf_model_name_or_path,
-            attn_implementation="flash_attention_2",
-            torch_dtype="auto",
-            use_cache=False,
-            device_map="cpu",
-            token=access_token,
-        )
+        if model_config:
+            base_model = modeling_class.from_pretrained(
+                hf_model_name_or_path,
+                attn_implementation="flash_attention_2",
+                torch_dtype="auto",
+                device_map="cpu",
+                token=access_token,
+                trust_remote_code=True,
+                config=model_config,
+            )
+        else:
+            base_model = modeling_class.from_pretrained(
+                hf_model_name_or_path,
+                attn_implementation="flash_attention_2",
+                torch_dtype="auto",
+                use_cache=False,
+                device_map="cpu",
+                token=access_token,
+                trust_remote_code=True,
+            )
+
         if is_patched:
             patch_llama_flash_attn_cp.apply_patch()
         logging.debug(f"Base model: {base_model}")
@@ -119,6 +147,8 @@ class SageMakerPeftShardedCheckpointIO(SageMakerShardedCheckpointIO):
         checkpoint: Dict[str, Any],
         path: _PATH,
         storage_options: Optional[Any] = None,
+        *a,
+        **kw,
     ) -> None:
         # Save everything else but the model state_dict in sharded mode
         checkpoint.pop("state_dict")

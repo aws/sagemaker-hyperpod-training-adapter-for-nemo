@@ -17,11 +17,12 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 import transformer_engine.pytorch as te
+import transformers
+from packaging import version as pversion
 from transformers import Cache, DynamicCache
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import (
     LLAMA_INPUTS_DOCSTRING,
-    LlamaFlashAttention2,
     LlamaModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -33,36 +34,49 @@ from transformers.utils import (
 )
 
 is_patched = False
+llama_flash_attn_patch = True
+
+TF_VERSION = pversion.parse(transformers.__version__)
+if TF_VERSION > pversion.parse("4.44.2"):
+    llama_flash_attn_patch = False
+
+if llama_flash_attn_patch:
+    from transformers.models.llama.modeling_llama import LlamaFlashAttention2
+
+    original_LFA2__init__ = LlamaFlashAttention2.__init__
+    original_LFA2_forward = LlamaFlashAttention2.forward
 
 original_get_extra_state = te.attention.DotProductAttention.get_extra_state
-original_LFA2__init__ = LlamaFlashAttention2.__init__
-original_LFA2_forward = LlamaFlashAttention2.forward
 original_LM_forward = LlamaModel.forward
 original_LRE_forward = LlamaRotaryEmbedding.forward
 
 
 def unapply_patch():
     global is_patched
+    global llama_flash_attn_patch
     te.attention.DotProductAttention.get_extra_state = original_get_extra_state
-    LlamaFlashAttention2.__init__ = original_LFA2__init__
-    LlamaFlashAttention2.forward = original_LFA2_forward
     LlamaModel.forward = original_LM_forward
     LlamaRotaryEmbedding.forward = original_LRE_forward
+    if llama_flash_attn_patch:
+        LlamaFlashAttention2.__init__ = original_LFA2__init__
+        LlamaFlashAttention2.forward = original_LFA2_forward
     is_patched = False
 
 
 def apply_patch():
     global is_patched
+    global llama_flash_attn_patch
     # patch https://github.com/NVIDIA/TransformerEngine/blob/841634cab9662581ed0decaa2d3e6dac2b8b544b/transformer_engine/pytorch/module/base.py#L525
     te.attention.DotProductAttention.get_extra_state = patched_get_extra_state
-    # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L465
-    LlamaFlashAttention2.__init__ = patched_LFA2__init__
-    # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L473
-    LlamaFlashAttention2.forward = patched_LFA2_forward
     # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L918
     LlamaModel.forward = patched_LM_forward
     # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L198
     LlamaRotaryEmbedding.forward = patched_LRE_forward
+    if llama_flash_attn_patch:
+        # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L465
+        LlamaFlashAttention2.__init__ = patched_LFA2__init__
+        # patch https://github.com/huggingface/transformers/blob/v4.44.2/src/transformers/models/llama/modeling_llama.py#L473
+        LlamaFlashAttention2.forward = patched_LFA2_forward
     is_patched = True
 
 

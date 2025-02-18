@@ -19,6 +19,7 @@ from omegaconf.omegaconf import OmegaConf
 from hyperpod_nemo_adapter.collections.model.nlp import (
     SageMakerDeepSeekDistilledLlamaModel,
     SageMakerDeepSeekDistilledQwenModel,
+    SageMakerDeepSeekR1Model,
 )
 from hyperpod_nemo_adapter.collections.parts import SageMakerTrainerBuilder
 from hyperpod_nemo_adapter.utils.config_utils import validate_config
@@ -30,15 +31,14 @@ def train(cfg: DictConfig) -> None:
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
+    model_module = None
     exp_manager(trainer, cfg.exp_manager)
-
     if "llama" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledLlamaModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     if "qwen" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledQwenModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
-    elif "deepseek_r1" in cfg.model.model_type or "deepseek_v3" in cfg.model.model_type:
-        pass  # TODO add a model class for the first-party DeepSeek models (DeepSeek-R1, DeepSeek-V3...)
-
+    elif "deepseek_r1" in cfg.model.model_type:
+        model_module = SageMakerDeepSeekR1Model(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     trainer.fit(model_module, datamodule=data_module)
 
 
