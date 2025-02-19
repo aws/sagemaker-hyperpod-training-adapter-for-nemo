@@ -54,8 +54,8 @@ class SageMakerDeepSeekR1Model(SageMakerNLPBaseModel):
             model_config, DeepseekV3Config
         ), f"model_type is set to deepseek_r1 but hf_model_name_or_path is not the same model, getting {type(model_config)}"
         model_config.update(configurable_dict)
-        if hasattr(self.model_config, "quantization_config"):
-            delattr(self.model_config, "quantization_config")
+        if hasattr(model_config, "quantization_config"):
+            delattr(model_config, "quantization_config")
         return model_config
 
     def _build_model_from_pretrain(self, model_cfg, torch_dtype=None, quantization_config=None):
