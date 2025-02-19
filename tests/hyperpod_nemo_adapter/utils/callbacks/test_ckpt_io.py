@@ -48,9 +48,21 @@ class TestSageMakerCheckpointIO:
         checkpoint = {"state_dict": {"key": "value"}}
         path = "/path/to/checkpoint"
         storage_options = None
-        checkpoint_io.save_checkpoint(checkpoint, path, storage_options)
-
-        mock_sharded_ckpt_io_save.assert_called_once_with(checkpoint, path, storage_options)
+        modeling_class = None
+        checkpoint_io.save_checkpoint(
+            checkpoint=checkpoint,
+            path=path,
+            storage_options=storage_options,
+            modeling_class=modeling_class,
+            model_config=None,
+        )
+        mock_sharded_ckpt_io_save.assert_called_once_with(
+            checkpoint=checkpoint,
+            path=path,
+            storage_options=storage_options,
+            modeling_class=modeling_class,
+            model_config=None,
+        )
 
     @patch("hyperpod_nemo_adapter.utils.callbacks.sharded_ckpt_io.SageMakerShardedCheckpointIO.load_checkpoint")
     def test_load_checkpoint(self, mock_sharded_ckpt_io_load, checkpoint_io, trainer_mock):

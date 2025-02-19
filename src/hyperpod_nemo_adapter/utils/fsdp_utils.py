@@ -95,7 +95,7 @@ def get_auto_wrap_policy(policy: str, transformer_layer=None, use_peft=False):
             )
 
 
-def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
+def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False, peft_type=None):
     """Get transformer layer."""
     if use_smp_model:
         # For pt-2.1-tsm-2.1 releases and below,
@@ -130,6 +130,18 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False):
         from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
         transformer_layer = Qwen2DecoderLayer
+    elif "deepseek_r1" in model_type:
+        from hyperpod_nemo_adapter.collections.model.nlp.custom_models.modeling_deepseek import (
+            DeepseekV3DecoderLayer,
+            DeepseekV3MLP,
+        )
+
+        if (
+            peft_type is not None and peft_type == "qlora_4bit"
+        ):  # for QLoRA finetuning we dont need to wrap the MLP layer
+            transformer_layer = DeepseekV3DecoderLayer
+        else:  # for all other finetuning strategies also wrap MLP layers
+            transformer_layer = (DeepseekV3DecoderLayer, DeepseekV3MLP)
 
     if transformer_layer == None:
         raise Exception(f"transformer_layer for model type {model_type} not defined.")

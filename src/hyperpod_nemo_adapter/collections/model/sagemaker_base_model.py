@@ -137,6 +137,10 @@ class SageMakerNLPBaseModel(ModelPT):
         return self._cfg.get("peft", None) is not None and self._cfg.peft.get("peft_type", None) is not None
 
     @property
+    def peft_type(self):
+        return self._cfg.peft.get("peft_type", None)
+
+    @property
     def do_finetune_with_pretrained_weights(self):
         """
         Returns true if we need to load pretrained weights from model_name_or_path
@@ -256,6 +260,44 @@ class SageMakerNLPBaseModel(ModelPT):
             # initialize model on meta device
             return self.build_model(model_cfg)
 
+    def get_quantization_config(self):
+        if self._cfg.peft.get("peft_type", None) is not None and "qlora_4bit" in self._cfg.peft.peft_type:
+            if self.do_patch_attn_context_parallel:
+                # if patching attention with TransformerEngine CP, HF crashes on get_keys_to_not_convert.
+                # instead, specify llm_int8_skip_modules, to bypass get_keys_to_not_convert function.
+                llm_int8_skip_modules = ["lm_head"]
+            else:
+                llm_int8_skip_modules = None
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_quant_storage=torch.bfloat16,
+                llm_int8_skip_modules=llm_int8_skip_modules,
+            )
+        else:
+            quantization_config = None
+        return quantization_config
+
+    def get_lora_config(self):
+        target_modules = None
+        if self._cfg.peft.get("target_modules", None) is not None:
+            target_modules = list(self._cfg.peft.target_modules)
+        lora_config = LoraConfig(
+            target_modules=target_modules or "all-linear",
+            # Alpha parameter for LoRA scaling
+            lora_alpha=self._cfg.peft.alpha,
+            # Dropout probability for LoRA layers
+            lora_dropout=self._cfg.peft.dropout,
+            # LoRA attention dimension
+            r=self._cfg.peft.rank,
+            bias="none",
+            task_type="CAUSAL_LM",
+            inference_mode=False,
+        )
+        return lora_config
+
     def build_model(self, model_cfg):
         if self.use_peft:
             return self._build_model_from_pretrain_peft(model_cfg)
@@ -273,41 +315,20 @@ class SageMakerNLPBaseModel(ModelPT):
         # see https://github.com/huggingface/transformers/blob/27903de7ecfc21e9b5a061c46c3b1ff73539d385/src/transformers/modeling_utils.py#L140
         os.environ["ACCELERATE_USE_FSDP"] = "True"
         os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = "True"
+        if (
+            self.peft_type is not None
+            and self.peft_type == "lora"
+            and self._cfg.get("model_type", None) == "deepseek_r1"
+        ):
+            os.environ["FORCE_ACTIVATE"] = "True"
 
-        if self._cfg.peft.peft_type == "qlora_4bit":
-            if self.do_patch_attn_context_parallel:
-                # if patching attention with TransformerEngine CP, HF crashes on get_keys_to_not_convert.
-                # instead, specify llm_int8_skip_modules, to bypass get_keys_to_not_convert function.
-                llm_int8_skip_modules = ["lm_head"]
-            else:
-                llm_int8_skip_modules = None
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_quant_storage=torch.bfloat16,
-                llm_int8_skip_modules=llm_int8_skip_modules,
-            )
-        else:
-            quantization_config = None
+        quantization_config = self.get_quantization_config()
 
         model = self._build_model_from_pretrain(
             model_cfg, torch_dtype=torch.bfloat16, quantization_config=quantization_config
         )
 
-        lora_config = LoraConfig(
-            target_modules=self._cfg.peft.target_modules or "all-linear",
-            # Alpha parameter for LoRA scaling
-            lora_alpha=self._cfg.peft.alpha,
-            # Dropout probability for LoRA layers
-            lora_dropout=self._cfg.peft.dropout,
-            # LoRA attention dimension
-            r=self._cfg.peft.rank,
-            bias="none",
-            task_type="CAUSAL_LM",
-            inference_mode=False,
-        )
+        lora_config = self.get_lora_config()
 
         model.enable_input_require_grads()
 

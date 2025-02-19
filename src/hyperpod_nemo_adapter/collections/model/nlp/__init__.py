@@ -14,6 +14,7 @@
 from .sagemaker_deepseek_model import (
     SageMakerDeepSeekDistilledLlamaModel,
     SageMakerDeepSeekDistilledQwenModel,
+    SageMakerDeepSeekR1Model,
 )
 from .sagemaker_llama_model import SageMakerLlamaModel
 from .sagemaker_mistral_model import SageMakerMistralModel

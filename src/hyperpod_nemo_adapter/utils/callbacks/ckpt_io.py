@@ -17,6 +17,7 @@ import pytorch_lightning as pl
 from lightning_fabric.plugins import CheckpointIO
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
+from transformers import AutoModelForCausalLM
 
 from hyperpod_nemo_adapter.constants import (
     OPTIMIZER_KEY_PREFIX,
@@ -56,6 +57,8 @@ class SageMakerCheckpointIO(CheckpointIO):
         checkpoint: Dict[str, Any],
         path: _PATH,
         storage_options: Optional[Any] = None,
+        modeling_class: Optional[Any] = AutoModelForCausalLM,
+        model_config: Optional[Any] = None,
     ) -> None:
         typ = self._checkpoint_type
         if typ not in self._checkpoint_io:
@@ -70,7 +73,13 @@ class SageMakerCheckpointIO(CheckpointIO):
             for i, optim in enumerate(optimizers):
                 checkpoint[f"{OPTIMIZER_KEY_PREFIX}_{i}"] = optim
         checkpoint_io = self._checkpoint_io[typ]
-        return checkpoint_io.save_checkpoint(checkpoint, path, storage_options)
+        return checkpoint_io.save_checkpoint(
+            checkpoint=checkpoint,
+            path=path,
+            storage_options=storage_options,
+            modeling_class=modeling_class,
+            model_config=model_config,
+        )
 
     def load_checkpoint(
         self,

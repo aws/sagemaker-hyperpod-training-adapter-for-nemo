@@ -120,6 +120,8 @@ class SageMakerLocalCheckpointIO(SageMakerBaseCheckpointIO):
         checkpoint: Dict[str, Any],
         path: _PATH,
         storage_options: Optional[Any] = None,
+        *a,
+        **kw,
     ) -> None:
         trainer = storage_options
         assert isinstance(trainer, pl.Trainer)
