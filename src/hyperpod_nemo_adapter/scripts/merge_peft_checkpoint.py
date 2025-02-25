@@ -17,15 +17,38 @@ import os
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
 
+from hyperpod_nemo_adapter.collections.model.nlp.custom_models.configuration_deepseek import (
+    DeepseekV3Config,
+)
+from hyperpod_nemo_adapter.collections.model.nlp.custom_models.modeling_deepseek import (
+    DeepseekV3ForCausalLM,
+)
+
 
 def run(args):
     print("Loading the HF model...")
-    model = AutoModelForCausalLM.from_pretrained(
-        args.hf_model_name_or_path,
-        torch_dtype="auto",
-        device_map="auto",
-        token=args.hf_access_token,
-    )
+
+    if args.deepseek_v3:
+        model_config = DeepseekV3Config.from_pretrained(
+            args.hf_model_name_or_path, token=args.hf_access_token, trust_remote_code=True
+        )
+        if hasattr(model_config, "quantization_config"):
+            delattr(model_config, "quantization_config")
+        model = DeepseekV3ForCausalLM.from_pretrained(
+            args.hf_model_name_or_path,
+            torch_dtype="auto",
+            device_map="auto",
+            token=args.hf_access_token,
+            config=model_config,
+            trust_remote_code=True,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            args.hf_model_name_or_path,
+            torch_dtype="auto",
+            device_map="auto",
+            token=args.hf_access_token,
+        )
 
     print("Loading the PEFT adapter checkpoint...")
     model = PeftModel.from_pretrained(model, args.peft_adapter_checkpoint_path)
@@ -60,6 +83,7 @@ def main():
     parser.add_argument(
         "--hf_access_token", type=str, default=None, help="Optional Hugging Face access token for authentication."
     )
+    parser.add_argument("--deepseek_v3", type=bool, default=False, help="Whether the model is DeepSeek V3 model.")
 
     args = parser.parse_args()
     run(args)

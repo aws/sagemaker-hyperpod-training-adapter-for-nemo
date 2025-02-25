@@ -407,7 +407,12 @@ class BaseExpManager(BaseModel):
     exp_dir: str = "/fsx/exp/"
     name: str = "my_experiment"
     explicit_log_dir: Optional[str] = None
-    create_tensorboard_logger: bool = True
+    create_tensorboard_logger: bool = False
+    summary_writer_kwargs: dict = Field(default_factory=dict)
+    create_mlflow_logger: bool = False
+    mlflow_logger_kwargs: dict = Field(default_factory=dict)
+    create_wandb_logger: bool = False
+    wandb_logger_kwargs: dict = Field(default_factory=dict)
     create_checkpoint_callback: bool = True
     checkpoint_callback_params: BaseCheckpointCallbackConfig = Field(default_factory=BaseCheckpointCallbackConfig)
     export_full_model: BaseExportFullModelConfig = Field(default_factory=BaseExportFullModelConfig)

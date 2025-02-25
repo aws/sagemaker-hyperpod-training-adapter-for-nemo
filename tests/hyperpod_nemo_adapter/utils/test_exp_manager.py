@@ -75,6 +75,12 @@ def test_exp_manager_valid_cfg(mock_trainer):
         "ema": {"enable": True},
         "create_early_stopping_callback": True,
         "max_time_per_run": "00:03:55:00",
+        "create_tensorboard_logger": False,
+        "summary_writer_kwargs": {},
+        "create_mlflow_logger": False,
+        "mlflow_logger_kwargs": {},
+        "create_wandb_logger": False,
+        "wandb_logger_kwargs": {},
     }
     with patch("hyperpod_nemo_adapter.utils.get_rank.is_global_rank_zero", return_value=True):
         log_dir = exp_manager(mock_trainer, mock_cfg)

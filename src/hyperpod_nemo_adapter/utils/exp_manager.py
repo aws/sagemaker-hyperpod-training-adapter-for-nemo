@@ -119,13 +119,66 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
     if checkpoint_name is None or checkpoint_name == "":
         checkpoint_name = cfg.name or "default"
 
-    # Set mlflow name if it's not set, before the main name is erased
-    if cfg.create_mlflow_logger and (not cfg.mlflow_logger_kwargs.get("experiment_name", None)):
-        cfg.mlflow_logger_kwargs.experiment_name = cfg.name
-        logging.warning(
-            "mlflow logger specified but no experiment name set. Using the same as Tensorboard: %s",
-            cfg.mlflow_logger_kwargs.experiment_name,
-        )
+    # by default we use the exp_dir as the logger_exp_dir (used by nemo when setting up tensorboard logger)
+    logger_exp_dir = exp_dir
+
+    # tensorboard kwargs
+    if cfg.create_tensorboard_logger:
+        if cfg.summary_writer_kwargs.get("save_dir", None):
+            # want to make sure there is a save_dir in summary_writer_kwargs
+            logger_exp_dir = cfg.summary_writer_kwargs.get("save_dir")
+            logging.warning(
+                "tensorboard logger specified to %s. Overriding exp_dir: %s",
+                cfg.summary_writer_kwargs.get("save_dir"),
+                cfg.exp_dir,
+            )
+            # https://github.com/NVIDIA/NeMo/blob/58edb40a74f2f6589ed2e9c8c1d5c58fb2eefd63/nemo/utils/exp_manager.py#L1007
+            # removing save_dir arg since NeMo passes exp_dir param directly into TensorboardLogger() class so including in kwargs as well would unexpectedly overload class init
+            cfg.summary_writer_kwargs.pop("save_dir", None)
+
+        if cfg.summary_writer_kwargs.get("name", None):
+            # want to make sure there is a name in summary_writer_kwargs
+            cfg.summary_writer_kwargs.name = cfg.name
+            logging.warning(
+                "tensorboard logger specified but no 'name' set. Using experiment name in recipe: %s",
+                cfg.summary_writer_kwargs.name,
+            )
+
+    # mlflow kwargs
+    if cfg.create_mlflow_logger:
+        if not cfg.mlflow_logger_kwargs.get("experiment_name", None):
+            # want to make sure there is an experiment_name in mlflow_logger_kwargs
+            cfg.mlflow_logger_kwargs.experiment_name = cfg.name
+            logging.warning(
+                "mlflow logger specified but no 'experiment_name' set. Using experiment name in recipe: %s",
+                cfg.mlflow_logger_kwargs.experiment_name,
+            )
+
+        if not cfg.mlflow_logger_kwargs.get("tracking_uri", None):
+            # want to make sure there is a tracking_uri in mlflow_logger_kwargs
+            cfg.mlflow_logger_kwargs.tracking_uri = cfg.exp_dir
+            logging.warning(
+                "mlflow logger specified but no 'tracking_uri' set. Using experiment name in recipe: %s",
+                cfg.mlflow_logger_kwargs.tracking_uri,
+            )
+
+    # wandb kwargs
+    if cfg.create_wandb_logger:
+        if not cfg.wandb_logger_kwargs.get("name", None):
+            # want to make sure there is a name in wandb_logger_kwargs
+            cfg.wandb_logger_kwargs.name = cfg.name
+            logging.warning(
+                "wandb logger specified but no 'name' set. Using experiment name in recipe: %s",
+                cfg.mlflow_logger_kwargs.experiment_name,
+            )
+
+        if not cfg.wandb_logger_kwargs.get("save_dir", None):
+            # want to make sure there is a save_dir in wandb_logger_kwargs
+            cfg.wandb_logger_kwargs.save_dir = cfg.exp_dir
+            logging.warning(
+                "wandb logger specified but no 'save_dir' set. Using experiment name in recipe: %s",
+                cfg.mlflow_logger_kwargs.experiment_name,
+            )
 
     cfg.name = name  # Used for configure_loggers so that the log_dir is properly set even if name is ""
     cfg.version = version
@@ -174,7 +227,7 @@ def exp_manager(trainer: "pytorch_lightning.Trainer", cfg: Optional[Union[DictCo
     ):
         configure_loggers(
             trainer,
-            exp_dir,
+            logger_exp_dir,
             log_dir,
             cfg.name,
             cfg.version,

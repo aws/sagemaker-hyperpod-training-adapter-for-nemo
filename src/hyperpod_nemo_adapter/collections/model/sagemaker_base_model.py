@@ -456,12 +456,15 @@ class SageMakerNLPBaseModel(ModelPT):
         if self._cfg.get("context_parallel_degree", 1) > 1:
             input_ids, labels = get_batch_for_cp_rank((input_ids, labels))
 
-        if batch_idx == 0:
+        if batch_idx == 0 and dist.get_rank() == 0:
             # checking only on batch 0 to reduce checks during runtime
-            if input_ids.shape[1] != (self._cfg.max_context_width // self._cfg.get("context_parallel_degree", 1)):
+            if (self._cfg.get("context_parallel_degree", 1) > 1) & (
+                input_ids.shape[1] != (self._cfg.max_context_width // self._cfg.get("context_parallel_degree", 1))
+            ):
                 _logger.warning(
-                    f"Input data passed {input_ids.shape} does not respect max_context_width set. If context parallelism is enabled,",
-                    f"input_ids sequence length == (model.max_context_width / model.context_parallel_degree) ",
+                    f"Input data passed {input_ids.shape} does not respect max_context_width set. "
+                    f"If context parallelism is enabled, input_ids sequence length should be "
+                    f"(model.max_context_width / model.context_parallel_degree)."
                 )
 
         return input_ids, _, labels
