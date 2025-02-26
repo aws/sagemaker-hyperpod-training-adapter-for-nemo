@@ -35,7 +35,7 @@ def train(cfg: DictConfig) -> None:
     exp_manager(trainer, cfg.exp_manager)
     if "llama" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledLlamaModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
-    if "qwen" in cfg.model.model_type:
+    elif "qwen" in cfg.model.model_type:
         model_module = SageMakerDeepSeekDistilledQwenModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     elif "deepseek_r1" in cfg.model.model_type:
         model_module = SageMakerDeepSeekR1Model(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
