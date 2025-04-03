@@ -196,6 +196,12 @@ class BaseModelPeftConfig(BaseModel):
     target_modules: Optional[list[str]] = None
 
 
+class BaseModelDPOConfig(BaseModel):
+    enabled: bool = False
+    beta: float = Field(default=0.1, ge=0)
+    label_smoothing: float = Field(default=0.0, ge=0)
+
+
 class BaseModelConfig(BaseModel):
     # needed to disallow protected namespace "model_"
     model_config: ConfigDict = ConfigDict(protected_namespaces=())
@@ -281,6 +287,7 @@ class BaseModelConfig(BaseModel):
     nsys_profile: BaseModelNsysProfileConfig = Field(default_factory=BaseModelNsysProfileConfig)
     viztracer: BaseVizTracerConfig = Field(default_factory=BaseVizTracerConfig)
     peft: BaseModelPeftConfig = Field(default_factory=BaseModelPeftConfig)
+    dpo: BaseModelDPOConfig = Field(default_factory=BaseModelDPOConfig)
     rope_scaling: BaseRopeScalingConfig = Field(default_factory=BaseRopeScalingConfig)
 
     # Transformer Engine

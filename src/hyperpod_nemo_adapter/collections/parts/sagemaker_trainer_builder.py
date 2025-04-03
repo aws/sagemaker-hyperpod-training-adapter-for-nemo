@@ -21,7 +21,9 @@ from pytorch_lightning import Trainer
 
 from hyperpod_nemo_adapter.collections.data import (
     DummyDataModule,
+    DummyDPODataModule,
     HuggingFaceDataModule,
+    HuggingFaceDPODataModule,
     HuggingFaceVisionDataModule,
 )
 from hyperpod_nemo_adapter.collections.parts import SageMakerFSDPStrategy
@@ -212,8 +214,12 @@ class SageMakerTrainerBuilder:
     def _create_data_module(self, trainer):
         if self.cfg.model.multi_modal:
             return HuggingFaceVisionDataModule(self.cfg, trainer)
+        if self.cfg.model.data.use_synthetic_data and self.cfg.model.dpo.get("enabled", False):
+            return DummyDPODataModule(self.cfg, trainer)
         if self.cfg.model.data.use_synthetic_data:
             return DummyDataModule(self.cfg, trainer)
+        if self.cfg.model.dpo.get("enabled", False):
+            return HuggingFaceDPODataModule(self.cfg, trainer)
         if self.cfg.model.data.dataset_type == "hf":
             return HuggingFaceDataModule(self.cfg, trainer)
 

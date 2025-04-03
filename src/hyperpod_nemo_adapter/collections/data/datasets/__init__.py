@@ -12,7 +12,9 @@
 # language governing permissions and limitations under the License.
 
 from .dummy_dataset import DummyDataset
+from .dummy_dpo_dataset import DummyDPODataset
 from .hf_dataset import (
     HuggingFacePretrainingDataset,
     HuggingFacePretrainingVisionDataset,
 )
+from .hf_dpo_dataset import HuggingFaceDPODataset

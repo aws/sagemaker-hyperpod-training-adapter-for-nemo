@@ -214,6 +214,25 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         if cfg.get("offload_activations", None):
             pytorch_model = OffloadWrapper(pytorch_model)
         model.model = pytorch_model
+
+        if hasattr(model, "ref_model") and model.ref_model is not None:
+            ref_fsdp = FSDP(
+                module=model.ref_model,
+                auto_wrap_policy=auto_wrap_policy,
+                mixed_precision=mixed_precision_policy,
+                sharding_strategy=sharding_strategy,
+                backward_prefetch=backward_prefetch,
+                forward_prefetch=cfg.forward_prefetch,
+                limit_all_gathers=cfg.limit_all_gathers,
+                device_id=torch.cuda.current_device(),
+                use_orig_params=cfg.use_orig_param,
+                param_init_fn=param_init_fn,
+                post_param_init_fn=post_param_init_fn,
+                sync_module_states=model.do_finetune_with_pretrained_weights,
+            )
+            model.ref_model = ref_fsdp
+            model.ref_model.eval()  # Set reference model to evaluation mode
+
         return model
 
     def _setup_delayed_param(self, cfg, model):
