@@ -13,5 +13,7 @@
 
 from .base import BaseDataModule, SkipDataLoader
 from .dummy_data_module import DummyDataModule
+from .dummy_dpo_data_module import DummyDPODataModule
 from .hf_data_module import HuggingFaceDataModule
+from .hf_dpo_data_module import HuggingFaceDPODataModule
 from .hf_image_data_module import HuggingFaceVisionDataModule

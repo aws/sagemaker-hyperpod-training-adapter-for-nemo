@@ -39,6 +39,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 from hyperpod_nemo_adapter.constants import CONFIG_MAPPING_HF_TO_RECIPE_ALIASES
 from hyperpod_nemo_adapter.patches import patch_llama_flash_attn_cp
 from hyperpod_nemo_adapter.utils.config_utils import get_hf_config_from_name_or_path
+from hyperpod_nemo_adapter.utils.dpo_utils import compute_dpo_loss
 from hyperpod_nemo_adapter.utils.general_utils import can_use_multimodal
 from hyperpod_nemo_adapter.utils.log_utils import Logger
 from hyperpod_nemo_adapter.utils.train_utils import (
@@ -71,6 +72,7 @@ class SageMakerNLPBaseModel(ModelPT):
         self.grad_norm = None
         self._cfg = cfg
         self.model = None
+        self.ref_model = None
         self.use_smp_model = use_smp_model
         self.model_config = None
 
@@ -203,6 +205,18 @@ class SageMakerNLPBaseModel(ModelPT):
             self.model = self._transform(model)
         else:
             self.model = model
+        if self._cfg.dpo.get("enabled", False) and not self.use_peft:
+            ref_model = self._initialize_model(self.model_config)
+            if self.do_patch_attn_context_parallel:
+                setup_transformer_engine_cp_groups(
+                    ref_model, get_global_ranks(tsm.state.cp_process_group), tsm.state.cp_process_group
+                )
+            if self.use_smp_model:
+                self.ref_model = self._transform(ref_model)
+            else:
+                self.ref_model = ref_model
+            self.ref_model.eval()
+
         self.fp8_recipe = self._fp8_delayed_scaling()
 
     def param_init_fn(self, module):
@@ -389,6 +403,47 @@ class SageMakerNLPBaseModel(ModelPT):
             return AutoModelForCausalLM.from_config(model_cfg)
         return AutoModelForCausalLM.from_config(model_cfg, attn_implementation=attn)
 
+    def _training_step_dpo(self, batch, batch_idx, *a, **kw):
+        prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask = self._prepare_dpo_input_batch(
+            batch, batch_idx
+        )
+        dpo_params = {
+            "model": self,
+            "ref_model": self.ref_model,
+            "prompt_ids": prompt_ids,
+            "prompt_mask": prompt_mask,
+            "chosen_ids": chosen_ids,
+            "chosen_mask": chosen_mask,
+            "rejected_ids": rejected_ids,
+            "rejected_mask": rejected_mask,
+            "max_length": self._cfg.max_context_width,
+            "beta": self._cfg.dpo.get("beta", 0.1),
+            "label_smoothing": self._cfg.dpo.get("label_smoothing", 0.0),
+            "peft": self.use_peft,
+            "bf16": self._cfg.precision == "bf16",
+        }
+        if self.use_smp_model and self._cfg.fp8:
+            fp8 = self._cfg.fp8
+            fp8_recipe = self.fp8_recipe
+            fp8_group = tsm.state.world_process_group
+            with transformer_engine.pytorch.fp8_autocast(
+                enabled=fp8,
+                fp8_recipe=fp8_recipe,
+                fp8_group=fp8_group,
+            ):
+                loss = compute_dpo_loss(
+                    *a,
+                    **dpo_params,
+                    **kw,
+                )
+        else:
+            loss = compute_dpo_loss(
+                *a,
+                **dpo_params,
+                **kw,
+            )
+        return loss
+
     def _training_step_fp8(self, batch, batch_idx, *a, **kw):
         fp8 = self._cfg.fp8
         fp8_recipe = self.fp8_recipe
@@ -428,7 +483,9 @@ class SageMakerNLPBaseModel(ModelPT):
         General training forward steps, backward/optimizer step will be done by
         PTL can also skip auto optimization with self.automatic_optimization=False
         """
-        if self.use_smp_model and self._cfg.fp8:
+        if self._cfg.dpo.get("enabled", False):
+            self.loss = self._training_step_dpo(batch, batch_idx, *a, **kw)
+        elif self.use_smp_model and self._cfg.fp8:
             self.loss = self._training_step_fp8(batch, batch_idx, *a, **kw)
         else:
             self.loss = self._training_step(batch, batch_idx, *a, **kw)
@@ -438,14 +495,60 @@ class SageMakerNLPBaseModel(ModelPT):
         """
         Validation step
         """
-        input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
-        val_loss = self(
-            input_ids=input_ids,
-            attention_mask=None,
-            labels=labels,
-        )["loss"]
+        if self._cfg.get("dpo", False):
+            prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask = (
+                self._prepare_dpo_input_batch(batch, batch_idx)
+            )
+            dpo_params = {
+                "model": self,
+                "ref_model": self.ref_model,
+                "prompt_ids": prompt_ids,
+                "prompt_mask": prompt_mask,
+                "chosen_ids": chosen_ids,
+                "chosen_mask": chosen_mask,
+                "rejected_ids": rejected_ids,
+                "rejected_mask": rejected_mask,
+                "max_length": self._cfg.max_context_width,
+                "beta": self._cfg.dpo.get("beta", 0.1),
+                "label_smoothing": self._cfg.dpo.get("label_smoothing", 0.0),
+                "peft": self.use_peft,
+                "bf16": self._cfg.precision == "bf16",
+            }
+            val_loss = compute_dpo_loss(**dpo_params)
+        else:
+            input_ids, _, labels = self._prepare_input_batch(batch, batch_idx)
+            val_loss = self(
+                input_ids=input_ids,
+                attention_mask=None,
+                labels=labels,
+            )["loss"]
         self.val_loss += val_loss.detach()
         return val_loss
+
+    def _prepare_dpo_input_batch(self, batch, batch_idx):
+        """
+        Parse input batch, pre-process for DPO context parallel
+        """
+        prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask = (
+            self.trainer.datamodule.get_batch(batch)
+        )
+        self.batch_num_sequences = prompt_ids.shape[0]
+        if self._cfg.get("context_parallel_degree", 1) > 1:
+            # Apply context parallel processing to all tensors
+            prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask = get_batch_for_cp_rank(
+                (prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask)
+            )
+        if batch_idx == 0:
+            # checking only on batch 0 to reduce checks during runtime
+            chosen_width = prompt_ids.shape[1] + chosen_ids.shape[1]
+            rejected_width = prompt_ids.shape[1] + rejected_ids.shape[1]
+            width_over_degree = self._cfg.max_context_width // self._cfg.get("context_parallel_degree", 1)
+            if chosen_width != width_over_degree or rejected_width != width_over_degree:
+                _logger.warning(
+                    f"Warning: input data passed {prompt_ids.shape}, {chosen_ids.shape}, {rejected_ids.shape} does not respect max_context_width set. If context parallelism is enabled,",
+                    f"Completion input_ids sequence length == (model.max_context_width / model.context_parallel_degree) ",
+                )
+        return prompt_ids, prompt_mask, chosen_ids, chosen_mask, rejected_ids, rejected_mask
 
     def _prepare_input_batch(self, batch, batch_idx):
         """

@@ -185,6 +185,7 @@ def set_mixed_precision_recipe(
         buffer_dtype = utils_funcs.torch_dtype_from_precision(set_buffer_dtype, None)
     else:
         buffer_dtype = torch.float32 if use_smp_model else param_dtype
+
     return MixedPrecision(
         param_dtype=param_dtype,
         reduce_dtype=reduce_dtype,

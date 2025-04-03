@@ -1,12 +1,17 @@
+# Original Copyright (c), DeepSeek. Modifications © Amazon.com
+
+# Referred from https://github.com/deepseek-ai/DeepSeek-V3/tree/main/inference/fp8_cast_bf16.py
+
 import json
 import os
 from argparse import ArgumentParser
 from glob import glob
 
 import torch
-from kernel import weight_dequant
 from safetensors.torch import load_file, save_file
 from tqdm import tqdm
+
+from .casting_utils.kernel import weight_dequant
 
 
 def main(fp8_path, bf16_path):
