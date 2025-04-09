@@ -18,10 +18,20 @@ from typing import Any, Dict, Optional
 import pytorch_lightning as pl
 import torch.distributed as dist
 import torch.sagemaker.distributed.checkpoint.state_dict_loader as loader
+import transformers
 from lightning_fabric.utilities.types import _PATH
 from nemo.utils import logging
+from packaging import version as pversion
 from peft import PeftModel
 from transformers import AutoModelForCausalLM
+
+TF_VERSION = pversion.parse(transformers.__version__)
+LLAMA4_MODELING_CLASS = None
+
+if TF_VERSION >= pversion.parse("4.51.1"):
+    from transformers import Llama4ForConditionalGeneration
+
+    LLAMA4_MODELING_CLASS = Llama4ForConditionalGeneration
 
 from hyperpod_nemo_adapter.patches import patch_llama_flash_attn_cp
 from hyperpod_nemo_adapter.utils.callbacks.base_ckpt_io import SageMakerBaseCheckpointIO
@@ -107,6 +117,15 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
                 token=access_token,
                 trust_remote_code=True,
                 config=model_config,
+            )
+        elif modeling_class == LLAMA4_MODELING_CLASS:
+            base_model = modeling_class.from_pretrained(
+                hf_model_name_or_path,
+                attn_implementation="flash_attention_2",
+                torch_dtype="auto",
+                device_map="cpu",
+                token=access_token,
+                trust_remote_code=True,
             )
         else:
             base_model = modeling_class.from_pretrained(

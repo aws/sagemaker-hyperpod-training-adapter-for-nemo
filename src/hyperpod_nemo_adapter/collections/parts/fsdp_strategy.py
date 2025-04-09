@@ -20,11 +20,13 @@ from typing import Any, Dict, Mapping, Optional, Union
 import torch
 import torch.distributed as dist
 import torch.sagemaker as tsm
+import transformers
 from accelerate.utils import FullyShardedDataParallelPlugin
 from lightning_fabric.utilities.types import _PATH
 from nemo.collections.nlp.parts.nlp_overrides import NLPFSDPStrategy
 from nemo.utils import logging
 from omegaconf.dictconfig import DictConfig
+from packaging import version as pversion
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl,
     OffloadWrapper,
@@ -48,6 +50,11 @@ from torch.sagemaker.distributed.checkpoint.state_dict_utils import (
 )
 from torch.sagemaker.utils import utils as tsm_utils
 from transformers import AutoModelForCausalLM
+
+TF_VERSION = pversion.parse(transformers.__version__)
+
+if TF_VERSION >= pversion.parse("4.51.1"):
+    from transformers import Llama4ForConditionalGeneration
 
 from hyperpod_nemo_adapter.collections.model.nlp.custom_models.modeling_deepseek import (
     DeepseekV3ForCausalLM,
@@ -477,6 +484,8 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         if self.cfg.model.model_type == "deepseek_r1":
             modeling_class = DeepseekV3ForCausalLM
             model_config = self.model.get_model_config()
+        if self.cfg.model.model_type == "llama_v4":
+            modeling_class = Llama4ForConditionalGeneration
         self.checkpoint_io.save_checkpoint(
             checkpoint=checkpoint,
             path=filepath,

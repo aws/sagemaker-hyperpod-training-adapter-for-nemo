@@ -117,7 +117,10 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False, pef
         from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
         transformer_layer = LlamaDecoderLayer
+    elif "llama_v4" in model_type:
+        from transformers.models.llama4.modeling_llama4 import Llama4TextDecoderLayer
 
+        transformer_layer = Llama4TextDecoderLayer
     elif model_type == "mistral":
         from transformers.models.mistral.modeling_mistral import MistralDecoderLayer
 
