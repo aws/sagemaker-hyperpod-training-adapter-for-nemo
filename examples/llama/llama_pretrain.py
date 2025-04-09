@@ -16,7 +16,10 @@ from nemo.utils import logging
 from omegaconf import DictConfig
 from omegaconf.omegaconf import OmegaConf
 
-from hyperpod_nemo_adapter.collections.model.nlp import SageMakerLlamaModel
+from hyperpod_nemo_adapter.collections.model.nlp import (
+    SageMakerLlama4Model,
+    SageMakerLlamaModel,
+)
 from hyperpod_nemo_adapter.collections.parts import SageMakerTrainerBuilder
 from hyperpod_nemo_adapter.utils.config_utils import validate_config
 from hyperpod_nemo_adapter.utils.exp_manager import exp_manager
@@ -28,7 +31,10 @@ def train(cfg: DictConfig) -> None:
     logging.info(f"\n{OmegaConf.to_yaml(cfg)}")
     trainer, data_module = SageMakerTrainerBuilder(cfg).create_trainer()
     exp_manager(trainer, cfg.exp_manager)
-    model_module = SageMakerLlamaModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
+    if "llama_v3" == cfg.model.model_type:
+        model_module = SageMakerLlamaModel(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
+    elif "llama_v4" == cfg.model.model_type:
+        model_module = SageMakerLlama4Model(cfg.model, trainer, use_smp_model=cfg.use_smp_model)
     trainer.fit(model_module, datamodule=data_module)
 
 
