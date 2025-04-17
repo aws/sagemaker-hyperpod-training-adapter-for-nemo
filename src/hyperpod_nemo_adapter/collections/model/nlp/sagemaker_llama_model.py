@@ -14,7 +14,6 @@
 import transformers
 from omegaconf import OmegaConf
 from packaging import version as pversion
-from peft import LoraConfig
 from transformers import LlamaConfig
 
 from hyperpod_nemo_adapter.collections.model import SageMakerNLPBaseModel
@@ -99,9 +98,6 @@ class SageMakerLlama4Model(SageMakerNLPBaseModel):
         path = self._cfg.hf_model_name_or_path
         _logger.info("Loading pretrained weights from %s.", path)
         use_flash_attn = self._cfg.use_flash_attention
-        attn = "flash_attention_2"
-        # TODO add support later for flash att
-        # ValueError: MllamaForCausalLM does not support Flash Attention 2.0 yet
         access_token = self._cfg.get("hf_access_token", None)
         if TF_VERSION < pversion.parse("4.37.1") or not use_flash_attn:
             return Llama4ForConditionalGeneration.from_pretrained(
@@ -111,26 +107,11 @@ class SageMakerLlama4Model(SageMakerNLPBaseModel):
                 quantization_config=quantization_config,
                 token=access_token,
             )
+        model_cfg.text_config._attn_implementation = "flash_attention_2"
         return Llama4ForConditionalGeneration.from_pretrained(
             path,
-            attn_implementation=attn,
             config=model_cfg,
             torch_dtype=torch_dtype,
             quantization_config=quantization_config,
             token=access_token,
         )
-
-    def get_lora_config(self):
-        lora_config = LoraConfig(
-            target_modules="language_model.model.layers.*self_attn.(q_proj|k_proj|v_proj|o_proj)",
-            # Alpha parameter for LoRA scaling
-            lora_alpha=self._cfg.peft.alpha,
-            # Dropout probability for LoRA layers
-            lora_dropout=self._cfg.peft.dropout,
-            # LoRA attention dimension
-            r=self._cfg.peft.rank,
-            bias="none",
-            task_type="CAUSAL_LM",
-            inference_mode=False,
-        )
-        return lora_config
