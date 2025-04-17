@@ -304,8 +304,8 @@ class BaseModelConfig(BaseModel):
         if multi_modal and not can_use_multimodal():
             raise ValueError("'multi_modal' requires transformers version of at least 4.45.2")
 
-        if multi_modal and not data.get("model_type") == "llama_v3":
-            raise ValueError("'multi_modal' only supported with 'model_type' llama_v3")
+        if multi_modal and not data.get("model_type") in ["llama_v3", "llama_v4"]:
+            raise ValueError("'multi_modal' only supported with 'model_type' llama_v3 and llama_v4")
 
         if model_data_config and not model_data_config.get("use_synthetic_data", None):
             if not model_data_config.get("train_dir", None) and not multi_modal:

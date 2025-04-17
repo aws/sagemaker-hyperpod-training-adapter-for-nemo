@@ -24,6 +24,7 @@ from hyperpod_nemo_adapter.collections.data import (
     DummyDPODataModule,
     HuggingFaceDataModule,
     HuggingFaceDPODataModule,
+    HuggingFaceMultiModalDataModule,
     HuggingFaceVisionDataModule,
 )
 from hyperpod_nemo_adapter.collections.parts import SageMakerFSDPStrategy
@@ -212,7 +213,7 @@ class SageMakerTrainerBuilder:
         return callbacks
 
     def _create_data_module(self, trainer):
-        if self.cfg.model.multi_modal:
+        if self.cfg.model.multi_modal and self.cfg.model.model_type == "llama_v3":
             return HuggingFaceVisionDataModule(self.cfg, trainer)
         if self.cfg.model.data.use_synthetic_data and self.cfg.model.dpo.get("enabled", False):
             return DummyDPODataModule(self.cfg, trainer)
@@ -221,6 +222,8 @@ class SageMakerTrainerBuilder:
         if self.cfg.model.dpo.get("enabled", False):
             return HuggingFaceDPODataModule(self.cfg, trainer)
         if self.cfg.model.data.dataset_type == "hf":
+            if self.cfg.model.multi_modal:
+                return HuggingFaceMultiModalDataModule(self.cfg, trainer)
             return HuggingFaceDataModule(self.cfg, trainer)
 
     def create_trainer(self, callbacks=None) -> Trainer:

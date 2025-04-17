@@ -147,7 +147,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         use_smp_model = self.use_smp_model
         cfg = self.cfg.model
         predefined_model = model.predefined_model
-        if not predefined_model or cfg.get("multi_modal", False):
+        if not predefined_model or cfg.get("multi_modal", False) and cfg.model_type == "llama_v3":
             # When running with model that is not predefined or multimodal Llama 3.2
             # we use HF's accelerate to handle the FSDP and activation checkpoint
             # Map to HF name: https://github.com/huggingface/accelerate/blob/main/src/accelerate/utils/constants.py#L37
@@ -245,7 +245,7 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
     def _setup_delayed_param(self, cfg, model):
         if not cfg.get("delayed_param", None):
             return None, None, nullcontext()
-        if self.use_smp_model or cfg.get("multi_modal", False):
+        if self.use_smp_model and cfg.get("multi_modal", False):
             return self._setup_smp_delayed_param(cfg, model)
         return self._setup_non_smp_delayed_param(cfg, model)
 
@@ -253,7 +253,9 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         if model.do_finetune_with_pretrained_weights:
             # Pulled param initialization function from open source meta/llama training recipes
             # https://github.com/meta-llama/llama-recipes/blob/f531d17287bf11d2cc2a5992e9282c77a70b2f51/src/llama_recipes/finetuning.py#L186C13-L186C103
-            param_init_fn = lambda module: module.to_empty(device=torch.device("cuda"), recurse=False)
+            param_init_fn = lambda module: (
+                module.to_empty(device=torch.device("cuda"), recurse=False) if dist.get_rank() != 0 else None
+            )
         else:
             param_init_fn = self.model.param_init_fn
         return param_init_fn, None, nullcontext()

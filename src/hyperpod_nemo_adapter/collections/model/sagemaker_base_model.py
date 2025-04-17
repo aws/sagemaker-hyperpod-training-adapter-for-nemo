@@ -162,7 +162,11 @@ class SageMakerNLPBaseModel(ModelPT):
     @property
     def do_patch_mllama(self):
         # https://github.com/huggingface/transformers/issues/34207
-        return not self.use_smp_model and self._cfg.get("multi_modal", False)
+        return (
+            not self.use_smp_model
+            and self._cfg.get("model_type", None) == "llama_v3"
+            and self._cfg.get("multi_modal", False)
+        )
 
     def setup(self, *a, **kw):
         if self.do_patch_mllama:
@@ -298,6 +302,8 @@ class SageMakerNLPBaseModel(ModelPT):
         target_modules = None
         if self._cfg.peft.get("target_modules", None) is not None:
             target_modules = list(self._cfg.peft.target_modules)
+            if type(target_modules) is list and len(target_modules) == 1:
+                target_modules = target_modules[0]
         lora_config = LoraConfig(
             target_modules=target_modules or "all-linear",
             # Alpha parameter for LoRA scaling
@@ -321,7 +327,6 @@ class SageMakerNLPBaseModel(ModelPT):
 
     def _build_model_from_pretrain_peft(self, model_cfg):
         assert not self.use_smp_model, "Must set use_smp_model=False to use PEFT"
-        assert not self._cfg.delayed_param, "Must set delayed_param=False to use PEFT"
         assert self._cfg.do_finetune, "Must set do_finetune=True to use PEFT"
         assert self._cfg.hf_model_name_or_path is not None, "Must provide pretrained weights to use PEFT"
 

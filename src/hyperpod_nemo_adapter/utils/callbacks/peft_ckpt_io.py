@@ -28,7 +28,7 @@ from transformers import AutoModelForCausalLM
 TF_VERSION = pversion.parse(transformers.__version__)
 LLAMA4_MODELING_CLASS = None
 
-if TF_VERSION >= pversion.parse("4.51.1"):
+if TF_VERSION >= pversion.parse("4.51.3"):
     from transformers import Llama4ForConditionalGeneration
 
     LLAMA4_MODELING_CLASS = Llama4ForConditionalGeneration
@@ -121,7 +121,6 @@ class SageMakerPeftFullCheckpointIO(SageMakerBaseCheckpointIO):
         elif modeling_class == LLAMA4_MODELING_CLASS:
             base_model = modeling_class.from_pretrained(
                 hf_model_name_or_path,
-                attn_implementation="flash_attention_2",
                 torch_dtype="auto",
                 device_map="cpu",
                 token=access_token,
