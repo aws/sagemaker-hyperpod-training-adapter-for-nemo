@@ -22,7 +22,6 @@ from packaging import version as pversion
 from transformers import Cache, DynamicCache
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import (
-    LLAMA_INPUTS_DOCSTRING,
     LlamaModel,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -32,6 +31,12 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
 )
+
+try:
+    # Compatibility with removal of this field in new versions of transformers
+    from transformers.models.llama.modeling_llama import LLAMA_INPUTS_DOCSTRING
+except ImportError:
+    LLAMA_INPUTS_DOCSTRING = ""
 
 is_patched = False
 llama_flash_attn_patch = True
