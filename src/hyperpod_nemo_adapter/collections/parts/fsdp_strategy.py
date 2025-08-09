@@ -146,8 +146,13 @@ class SageMakerFSDPStrategy(NLPFSDPStrategy):
         # retrieve the root module name of the model which is the first one.
         use_smp_model = self.use_smp_model
         cfg = self.cfg.model
-        predefined_model = model.predefined_model
-        if not predefined_model or cfg.get("multi_modal", False) and cfg.model_type == "llama_v3":
+
+        predefined_model = model.predefined_model or cfg.model_type in ["gpt_oss"]
+        # For a model to be pre-defined, we need to add it to fsdp_utils:get_transformer_layer()
+        # This is a requirement for using the get_auto_wrap_policy
+        # Models not manually added to get_transformer_layer will use FullyShardedDataParallelPlugin
+
+        if not predefined_model or (cfg.get("multi_modal", False) and cfg.model_type == "llama_v3"):
             # When running with model that is not predefined or multimodal Llama 3.2
             # we use HF's accelerate to handle the FSDP and activation checkpoint
             # Map to HF name: https://github.com/huggingface/accelerate/blob/main/src/accelerate/utils/constants.py#L37

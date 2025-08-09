@@ -133,6 +133,10 @@ def get_transformer_layer(model_type="gpt2", use_smp_model=False, moe=False, pef
         from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
         transformer_layer = Qwen2DecoderLayer
+    elif "gpt_oss" in model_type:
+        from transformers.models.gpt_oss.modeling_gpt_oss import GptOssDecoderLayer
+
+        transformer_layer = GptOssDecoderLayer
     elif "deepseek_r1" in model_type:
         from hyperpod_nemo_adapter.collections.model.nlp.custom_models.modeling_deepseek import (
             DeepseekV3DecoderLayer,
